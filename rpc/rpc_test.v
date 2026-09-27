@@ -1,0 +1,479 @@
+// rpc_test.v — the aria2 client, exercised with no aria2 and no socket.
+//
+// Everything here runs through the fake transport, which is the point of
+// Transport being a function pointer: the decoding, the multicall batching, the
+// auth token and the error paths are all covered in milliseconds and cannot be
+// flaky.
+module rpc
+
+import json2
+
+// ---- the auth token -----------------------------------------------------
+
+fn test_every_call_carries_the_token_as_the_first_parameter() {
+	// aria2 authorises by a `token:<secret>` leading parameter, not a header
+	// and not a login call. Forgetting it on one method is a silent 401, so
+	// this asserts the position rather than just the presence.
+	f := new_fake([ok('"1"')])
+	mut c := f.client('s3cret')
+	c.pause('abc') or { assert false, err.msg() }
+
+	params := f.params_of(0)
+	assert params.starts_with('["token:s3cret","abc"]'), 'got: ${params}'
+}
+
+fn test_the_token_is_not_sent_when_the_secret_is_empty() {
+	// No secret configured is a legitimate setup (aria2 without --rpc-secret,
+	// bound to loopback). The parameter must be dropped, not sent empty:
+	// "token:" is a real string to aria2 and would fail authentication.
+	f := new_fake([ok('"1"')])
+	mut c := f.client('')
+	c.pause('abc') or { assert false, err.msg() }
+	assert f.params_of(0) == '["abc"]', 'got: ${f.params_of(0)}'
+}
+
+fn test_request_ids_are_unique_per_call() {
+	f := new_fake([ok_raw(fixture_version)])
+	mut c := f.client('s')
+	c.version() or { assert false, err.msg() }
+	c.version() or { assert false, err.msg() }
+	assert f.requests.len == 2
+	assert f.requests[0] != f.requests[1], 'ids must differ: ${f.requests[0]} vs ${f.requests[1]}'
+}
+
+// ---- error handling -----------------------------------------------------
+
+fn test_an_aria2_error_becomes_an_error_value_with_code_and_message() {
+	// Never a panic and never a silent zero: the UI has to be able to say
+	// "download 3 failed" rather than render an empty row.
+	f := new_fake([err_body('1', 'Unauthorized')])
+	mut c := f.client('wrong')
+	mut msg := ''
+	c.pause('abc') or { msg = err.msg() }
+	assert msg != '', 'a rejected call must return an error'
+	assert msg.contains('Unauthorized'), 'got: ${msg}'
+	assert msg.starts_with('aria2: '), 'errors are namespaced: ${msg}'
+}
+
+fn test_a_response_with_neither_result_nor_error_is_an_error() {
+	// A proxy or a captive portal can answer 200 with HTML. That must not
+	// decode into a plausible-looking empty result, and it must not panic -
+	// the endpoint is on loopback, so a wrong answer there is reachable.
+	for junk in ['<html>captive portal</html>', '"just a string"', '42', 'null', '[]', '[1,2,3]'] {
+		f := new_fake([ok_raw(junk)])
+		mut c := f.client('s')
+		mut msg := ''
+		c.version() or { msg = err.msg() }
+		assert msg != '', 'garbage must not decode: ${junk}'
+	}
+}
+
+fn test_a_transport_failure_propagates_unchanged() {
+	// Connection refused is a transport error, not a JSON-RPC one, and the two
+	// want different handling in the UI.
+	f := new_fake([Reply{
+		err: 'connection refused'
+	}])
+	mut c := f.client('s')
+	mut msg := ''
+	c.version() or { msg = err.msg() }
+	assert msg.contains('connection refused'), 'got: '
+}
+
+fn test_a_client_with_no_transport_says_so_instead_of_crashing() {
+	// A misconfigured engine must produce a sentence, not a nil dereference.
+	mut c := new('127.0.0.1', 6800, 's')
+	mut msg := ''
+	c.version() or { msg = err.msg() }
+	assert msg.contains('no transport'), 'got: '
+}
+
+fn test_error_codes_from_several_failures_stay_distinct() {
+	// The UI groups failures by code, so two different aria2 errors must not
+	// collapse into one message.
+	//
+	// `for a, b in array` iterates (index, element) in V, so the pairs are
+	// unpacked by hand - a `for code, want in [[..],[..]]` reads like Python and
+	// silently binds the index to the code.
+	mut seen := map[string]string{}
+	for pair in [['1', 'Unauthorized'], ['3', 'Not found'], ['32', 'Timeout']] {
+		code := pair[0]
+		want := pair[1]
+		f := new_fake([err_body(code, want)])
+		mut c := f.client('s')
+		mut got := ''
+		c.version() or { got = err.msg() }
+		assert got != '', 'error ${code} must be reported'
+		seen[code] = got
+		assert got.contains(want), 'code ${code}: got ${got}'
+		assert got.contains(code), 'code ${code}: got ${got}'
+	}
+	assert seen.len == 3
+}
+
+// ---- decoding -----------------------------------------------------------
+
+fn test_status_decodes_the_fields_the_ui_binds_to() {
+	f := new_fake([ok_raw(fixture_status_active)])
+	mut c := f.client('s')
+	s := c.tell_status('2089b05ecca3d829', []) or { assert false, err.msg() }
+	assert s.gid == '2089b05ecca3d829'
+	assert s.status == 'active'
+	assert s.total_length == 1048576
+	assert s.completed_length == 524288
+	assert s.download_speed == 131072
+	assert s.upload_speed == 2048
+	assert s.connections == 4
+	assert s.num_pieces == 64
+	assert s.dir == '/downloads'
+}
+
+fn test_status_derivations_are_safe_at_the_edges() {
+	// Zero and unknown sizes are normal, and a NaN or a negative ETA would
+	// render as garbage in the row.
+	mut s := Status{
+		gid:              'x'
+		status:           'active'
+		total_length:     0
+		completed_length: 0
+		download_speed:   0
+	}
+	assert s.percent() == 0.0, 'unknown size must be 0%, not a division by zero'
+	assert s.eta_seconds() == -1, 'no rate means no ETA'
+
+	s.total_length = 100
+	s.completed_length = 50
+	s.download_speed = 10
+	assert s.percent() == 50.0
+	assert s.eta_seconds() == 5
+
+	// More completed than total happens when a torrent is re-checked.
+	s.completed_length = 150
+	assert s.percent() == 100.0, 'progress is clamped, not reported as 150%'
+	assert s.eta_seconds() == 0
+}
+
+fn test_status_recognises_torrents_and_seeding() {
+	plain := Status{
+		gid:    'a'
+		status: 'complete'
+	}
+	assert !plain.is_torrent()
+	assert !plain.is_finished() == false, 'complete is finished'
+
+	torrent := Status{
+		gid:       'b'
+		status:    'complete'
+		seeder:    true
+		info_hash: '0123456789abcdef0123456789abcdef01234567'
+	}
+	assert torrent.is_torrent()
+	assert torrent.is_finished()
+	assert torrent.is_seeding(), 'a complete torrent with a seed flag is seeding'
+
+	seeding_active := Status{
+		gid:       'c'
+		status:    'active'
+		seeder:    true
+		info_hash: 'abc'
+	}
+	assert !seeding_active.is_seeding(), 'seeding is a complete state, not an active one'
+}
+
+fn test_global_stat_reads_both_the_shipped_and_the_documented_key_names() {
+	// aria2's manual documents downloadSpeedOverall; every released build
+	// answers downloadSpeed. Reading only one of them yields a plausible 0,
+	// which is the worst kind of bug: the speedometer just never moves.
+	f := new_fake([ok_raw(fixture_global_stat)])
+	mut c := f.client('s')
+	g := c.global_stat() or { assert false, err.msg() }
+	assert g.download_speed == 131072
+	assert g.upload_speed == 2048
+	assert g.num_active == 1
+	assert g.num_waiting == 2
+	assert g.num_stopped == 3
+	assert g.num_stopped_total == 7
+
+	f2 := new_fake([ok_raw(fixture_global_stat_documented_names)])
+	mut c2 := f2.client('s')
+	g2 := c2.global_stat() or { assert false, err.msg() }
+	assert g2.download_speed == 131072, 'the documented name must work too'
+	assert g2.upload_speed == 2048
+}
+
+fn test_version_exposes_bit_torrent_support() {
+	// The setup screen has to be able to say "this aria2 build cannot do
+	// torrents" instead of failing later on the first magnet.
+	f := new_fake([ok_raw(fixture_version)])
+	mut c := f.client('s')
+	v := c.version() or { assert false, err.msg() }
+	assert v.version == '1.37.0'
+	assert v.supports_torrents()
+	assert v.has_feature('WebSocket')
+	assert !v.has_feature('Telepathy')
+
+	f2 := new_fake([ok_raw(fixture_version_no_bt)])
+	mut c2 := f2.client('s')
+	v2 := c2.version() or { assert false, err.msg() }
+	assert !v2.supports_torrents()
+}
+
+fn test_peers_decode_and_the_usable_test_excludes_choking_ones() {
+	f := new_fake([ok_raw(fixture_peers)])
+	mut c := f.client('s')
+	peers := c.get_peers('x') or { assert false, err.msg() }
+	assert peers.len == 2
+	assert peers[0].ip == '10.0.0.7'
+	assert peers[0].port == 51413
+	assert peers[0].download_speed == 65536
+	assert peers[0].is_usable()
+	assert !peers[1].is_usable(), 'a mutually choking peer transfers nothing'
+	assert peers[1].seeder
+}
+
+fn test_files_decode_selection_state() {
+	// `selected` is how the torrent file picker shows what aria2 will actually
+	// fetch, so a missing key must read as "not selected" rather than true.
+	f := new_fake([ok_raw(fixture_files)])
+	mut c := f.client('s')
+	files := c.get_files('x') or { assert false, err.msg() }
+	assert files.len == 3
+	assert files[0].index == 0
+	assert files[0].selected
+	assert files[0].length == 1024
+	assert !files[1].selected
+	assert files[2].path.ends_with('c.bin')
+}
+
+fn test_trackers_decode_from_the_nested_server_list() {
+	f := new_fake([ok_raw(fixture_trackers)])
+	mut c := f.client('s')
+	ts := c.get_trackers('x') or { assert false, err.msg() }
+	assert ts.len == 1
+	assert ts[0].index == 1
+	assert ts[0].uri == 'udp://tracker.example/announce'
+}
+
+fn test_options_decode_as_strings_because_aria2_sends_strings() {
+	// aria2 types every option as text and parses it itself, so a numeric
+	// option like max-concurrent-downloads arrives quoted. Reading it as a
+	// number would silently yield 0.
+	f := new_fake([ok_raw(fixture_global_option)])
+	mut c := f.client('s')
+	opts := c.get_global_option() or { assert false, err.msg() }
+	assert opts['max-concurrent-downloads'] == '5'
+	assert opts['max-overall-upload-limit'] == '1048576'
+	assert opts['dir'] == '/downloads'
+}
+
+// ---- multicall ----------------------------------------------------------
+
+fn test_a_snapshot_costs_exactly_one_request() {
+	// This is the number one latency in the app: the UI heartbeat. Six
+	// separate round trips would make the window stutter on every beat.
+	body := snapshot_body(fixture_global_stat, '[' + fixture_status_active + ']',
+		'[]', '[]')
+	f := new_fake([ok_envelope(body)])
+	mut c := f.client('s')
+	s := c.snapshot(100, 50) or { assert false, err.msg() }
+	assert f.requests.len == 1, 'a snapshot must be one request, got ${f.requests.len}'
+	assert f.method_of(0) == 'system.multicall'
+	assert s.stat.download_speed == 131072
+	assert s.active.len == 1
+	assert s.waiting.len == 0
+	assert s.version.supports_torrents()
+	assert s.options['dir'] == '/downloads'
+}
+
+fn test_the_multicall_batches_the_six_calls_the_ui_actually_needs() {
+	f := new_fake([ok_raw('[]')])
+	mut c := f.client('tok')
+	c.multicall(snapshot_calls(10, 5)) or { assert false, err.msg() }
+	body := f.params_of(0)
+	for want in ['aria2.getGlobalStat', 'aria2.tellActive', 'aria2.tellWaiting', 'aria2.tellStopped',
+		'aria2.getVersion', 'aria2.getGlobalOption'] {
+		assert body.contains(want), 'the batch is missing ${want}: ${body}'
+	}
+	// Each sub-call carries the token too, or aria2 rejects the inner ones.
+	assert body.contains('"token:tok"')
+	// And the window/limit arguments have to be positional numbers.
+	assert body.contains('[0,10]'), 'tellWaiting limit: ${body}'
+	assert body.contains('[0,5]'), 'tellStopped limit: ${body}'
+}
+
+fn test_a_short_multicall_result_is_an_error_not_a_partial_snapshot() {
+	// A snapshot missing a section would render as an empty list, which reads
+	// as "no downloads" - the most misleading possible answer.
+	f := new_fake([ok_raw('[1,2,3]')])
+	mut c := f.client('s')
+	mut msg := ''
+	c.snapshot(10, 10) or { msg = err.msg() }
+	assert msg.contains('of 6'), 'got: '
+}
+
+fn test_an_empty_batch_is_a_no_op() {
+	// A snapshot with nothing to ask should not spend a request.
+	f := new_fake([ok_raw('[]')])
+	mut c := f.client('s')
+	res := c.multicall([]) or { assert false, err.msg() }
+	assert res.len == 0
+	assert f.requests.len == 0
+}
+
+fn test_snapshot_all_orders_active_then_queued_then_finished() {
+	// The order is the queue's own, so the frontend must not have to sort.
+	body := snapshot_body(fixture_global_stat, '[' + fixture_status_active + ']',
+		'[' + fixture_status_complete + ']', '[' + fixture_status_error + ']')
+	f := new_fake([ok_envelope(body)])
+	mut c := f.client('s')
+	s := c.snapshot(100, 50) or { assert false, err.msg() }
+	all := s.all()
+	assert all.len == 3
+	assert all[0].status == 'active'
+	assert all[1].status == 'complete'
+	assert all[2].status == 'error'
+	assert all[2].error == 'Connection failed', 'the error message must survive: ${all[2].error}'
+	assert all[2].error_code == '3'
+}
+
+// ---- adding downloads ---------------------------------------------------
+
+fn test_add_uri_sends_mirrors_as_one_array() {
+	// Several URIs for one file is how aria2 does multi-source fetching, so
+	// they belong in a single addUri call, not in several.
+	f := new_fake([ok('"2089b05ecca3d829"')])
+	mut c := f.client('s')
+	gid := c.add_uri(['https://a.example/f.iso', 'https://b.example/f.iso'], {
+		'dir':                       '/downloads'
+		'max-connection-per-server': '16'
+	}) or { assert false, err.msg() }
+	assert gid == '2089b05ecca3d829'
+	params := f.params_of(0)
+	assert params.contains('["https://a.example/f.iso","https://b.example/f.iso"]'), params
+	// Options go in as strings, because that is what aria2 parses.
+	assert params.contains('"max-connection-per-server":"16"'), params
+}
+
+fn test_add_uri_without_options_omits_the_options_argument() {
+	// aria2 accepts a two-argument call; sending an empty object is not the
+	// same thing and has bitten clients before.
+	f := new_fake([ok('"g"')])
+	mut c := f.client('s')
+	c.add_uri(['https://a.example/f'], {}) or { assert false, err.msg() }
+	params := f.params_of(0)
+	assert params.starts_with('["token:s"'), params
+	assert params.ends_with(']') && !params.contains('{}'), params
+}
+
+fn test_add_torrent_sends_base64_metadata() {
+	f := new_fake([ok('"c"')])
+	mut c := f.client('s')
+	c.add_torrent('ZDE0OmEubWFnbmV0', [], {
+		'dir': '/downloads'
+	}) or { assert false, err.msg() }
+	params := f.params_of(0)
+	assert params.contains('"ZDE0OmEubWFnbmV0"'), params
+	assert params.contains('"dir":"/downloads"'), params
+}
+
+// ---- options the UI drives ---------------------------------------------
+
+fn test_change_option_sends_the_gid_and_the_option_map() {
+	f := new_fake([ok('"OK"')])
+	mut c := f.client('s')
+	c.change_option('abc', {
+		'max-download-limit': '2M'
+		'seed-ratio':         '1.5'
+	}) or { assert false, err.msg() }
+	params := f.params_of(0)
+	assert params.contains('"abc"'), params
+	assert params.contains('"max-download-limit":"2M"'), params
+	assert params.contains('"seed-ratio":"1.5"'), params
+}
+
+fn test_change_global_option_needs_no_gid() {
+	// The scheduler drives this one, and the difference from change_option is
+	// a missing first argument - which is easy to get wrong.
+	f := new_fake([ok('"OK"')])
+	mut c := f.client('s')
+	c.change_global_option({
+		'max-overall-download-limit': '1048576'
+	}) or { assert false, err.msg() }
+	params := f.params_of(0)
+	assert params.starts_with('["token:s",{'), params
+	assert params.contains('"max-overall-download-limit":"1048576"'), params
+}
+
+fn test_queue_control_methods_target_the_right_command() {
+	// A typo in an aria2 method name fails at runtime with a confusing error,
+	// and these names all look alike. Asserting the wire keeps them honest.
+	cases := [
+		['pause', 'aria2.pause']
+		['force_pause', 'aria2.forcePause']
+		['resume', 'aria2.unpause']
+		['remove', 'aria2.remove']
+		['remove_result', 'aria2.removeDownloadResult']
+		['pause_all', 'aria2.pauseAll']
+		['resume_all', 'aria2.unpauseAll']
+		['force_pause_all', 'aria2.forcePauseAll']
+		['purge_results', 'aria2.purgeDownloadResult']
+		['save_session', 'aria2.saveSession']
+		['shutdown', 'aria2.shutdown']
+		['force_shutdown', 'aria2.forceShutdown'],
+	]
+	for c2 in cases {
+		f := new_fake([ok('"OK"')])
+		mut c := f.client('s')
+		match c2[0] {
+			'pause' { c.pause('g') or {} }
+			'force_pause' { c.force_pause('g') or {} }
+			'resume' { c.resume('g') or {} }
+			'remove' { c.remove('g') or {} }
+			'remove_result' { c.remove_result('g') or {} }
+			'pause_all' { c.pause_all() or {} }
+			'resume_all' { c.resume_all() or {} }
+			'force_pause_all' { c.force_pause_all() or {} }
+			'purge_results' { c.purge_results() or {} }
+			'save_session' { c.save_session() or {} }
+			'shutdown' { c.shutdown() or {} }
+			'force_shutdown' { c.force_shutdown() or {} }
+			else {
+				assert false, 'unhandled case ${c2[0]}'
+			}
+		}
+		assert f.method_of(0) == c2[1], '${c2[0]} sent ${f.method_of(0)}, want ${c2[1]}'
+	}
+}
+
+fn test_change_position_passes_pos_and_how() {
+	// The drag handle in the queue reorders, and aria2's signature is
+	// (gid, pos, how) with `how` being a keyword string, not a flag.
+	f := new_fake([ok('2')])
+	mut c := f.client('s')
+	c.change_position('abc', 0, 'POS_SET') or { assert false, err.msg() }
+	params := f.params_of(0)
+	assert params.starts_with('["token:s","abc",0,"POS_SET"]'), params
+}
+
+// ---- endpoint handling --------------------------------------------------
+
+fn test_the_client_builds_a_loopback_endpoint_by_default() {
+	c := new('127.0.0.1', 16800, 's')
+	assert c.endpoint == 'http://127.0.0.1:16800/jsonrpc'
+}
+
+fn test_remote_endpoints_are_rejected() {
+	// The RPC secret is a bearer token in the request body. Over the network it
+	// is a token on the network, and Fluxget has no reason to accept that -
+	// the daemon is always a child process on this machine.
+	assert is_loopback('http://127.0.0.1:8735/jsonrpc')
+	assert is_loopback('http://localhost:6800/jsonrpc')
+	assert is_loopback('http://[::1]:6800/jsonrpc')
+	assert !is_loopback('http://192.168.1.10:6800/jsonrpc')
+	assert !is_loopback('http://example.com/jsonrpc')
+}
+
+fn test_endpoint_default_path_is_the_documented_one() {
+	assert default_path == '/jsonrpc'
+	assert default_port == 6800
+}
