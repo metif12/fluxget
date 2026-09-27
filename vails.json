@@ -1,0 +1,45 @@
+{
+	"name": "Fluxget",
+	"version": "0.1.0",
+	"asset_root": "frontend",
+	"windows": [
+		{
+			"label": "main",
+			"title": "Fluxget",
+			"width": 1360,
+			"height": 880
+		}
+	],
+	"capabilities": [
+		{
+			"id": "fluxget-core",
+			"windows": ["main"],
+			"commands": [
+				"fluxget.ping",
+				"fluxget.info",
+				"fluxget.health"
+			],
+			"asset_roots": ["frontend"],
+			"platforms": []
+		},
+		{
+			"id": "native-dialogs",
+			"windows": ["main"],
+			"commands": ["dialog.open", "dialog.save", "dialog.message"],
+			"asset_roots": [],
+			"platforms": []
+		},
+		{
+			"id": "host-info",
+			"windows": ["main"],
+			"commands": ["os_info.get"],
+			"asset_roots": [],
+			"platforms": []
+		}
+	],
+	"bundle": {
+		"name": "Fluxget",
+		"icon": "",
+		"windows_dll_side_by_side": true
+	}
+}

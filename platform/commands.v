@@ -1,0 +1,152 @@
+// commands.v — the handlers behind platform/app_manifest().
+//
+// Every handler receives raw JSON params and returns raw JSON, because a
+// bridge command runs on the webview main thread (vails ADR-0010): the work
+// here must be pure and fast. Anything slow (the aria2 RPC call, the process
+// supervisor) is reached through engine/ later, never inlined into a handler.
+//
+// Phase 0 ships the three probe commands. `fluxget.health` answers honestly
+// that the engine is not up yet, which is what lets the frontend show the
+// setup page instead of an empty list.
+module platform
+
+import json2
+import os
+import time
+
+// BuildInfo is what the app knows about itself at runtime. Kept separate from
+// the handler so a test can assert the JSON shape without booting a window.
+//
+// WIRE FORMAT RULE (applies to every struct in Fluxget that crosses the
+// bridge): V encodes struct field names verbatim, so the field name *is* the
+// JSON key, and it has to be written the same way in
+// app_manifest().ts_types. Two alternatives are unavailable:
+//
+//   - uppercase is rejected outright ("field name cannot contain uppercase
+//     letters, use snake_case instead"), so camelCase is not an option;
+//   - a `[json: 'exePath']` attribute is miscompiled by V 0.5.2: the codegen
+//     emits a phantom `platform__json` embedded struct and the C build dies
+//     with "unknown type name 'platform__json'".
+//
+// So: snake_case in V, snake_case on the wire, snake_case in the generated
+// vails.d.ts. That is also what the vails repo's own os_info service does, so
+// it is the framework convention rather than a workaround. The test
+// test_dts_text_agrees_with_the_wire_format fails the build if a field and its
+// interface ever drift apart.
+pub struct BuildInfo {
+pub mut:
+	app      string = app_name
+	version  string = app_version
+	os_name  string = os_name()
+	arch     string = arch_name()
+	exe_path string
+	root     string
+	dev      bool
+	frontend string
+	vails    string = 'unknown'
+}
+
+// Health is the wire shape of the health command.
+pub struct Health {
+pub mut:
+	ok        bool
+	mode      string
+	aria2     string
+	connected bool
+	detail    string
+}
+
+// os_name returns a lowercase 'windows' / 'linux' / 'macos' / '<other>',
+// matching the vocabulary vails itself uses in its capability `platforms`.
+pub fn os_name() string {
+	$if windows {
+		return 'windows'
+	} $else $if linux {
+		return 'linux'
+	} $else $if macos {
+		return 'macos'
+	} $else {
+		return 'other'
+	}
+}
+
+// arch_name is the target architecture, resolved at compile time (V exposes
+// the arch as a compile-time constant, not a runtime function).
+pub fn arch_name() string {
+	$if amd64 {
+		return 'x86_64'
+	} $else $if arm64 {
+		return 'aarch64'
+	} $else $if i386 {
+		return 'x86'
+	} $else {
+		return 'unknown'
+	}
+}
+
+// info_from builds the Info payload from an explicit root, so the production
+// handler and a test can both use it without duplicating the field list.
+pub fn info_from(root string, dev_mode bool, frontend string) BuildInfo {
+	return BuildInfo{
+		exe_path: os.executable()
+		root:     root
+		dev:      dev_mode
+		frontend: frontend
+	}
+}
+
+// build_info is info_from under the name main.v and the handlers use.
+pub fn build_info(root string, dev_mode bool, frontend string) BuildInfo {
+	return info_from(root, dev_mode, frontend)
+}
+
+// handle_ping answers the round-trip probe. No params, fixed reply: if the
+// frontend can render this string, the whole bridge path works.
+pub fn handle_ping(_ string) !string {
+	return 'pong'
+}
+
+// handle_info reports build and host facts as JSON.
+pub fn handle_info(_ string) !string {
+	return json2.encode(build_info(os.getwd(), dev_mode_from_env(), 'unknown'))
+}
+
+// handle_health reports engine health. Until aria2ctl/ lands it describes the
+// engine as disconnected with a reason instead of pretending to be ready.
+pub fn handle_health(_ string) !string {
+	return json2.encode(Health{
+		ok:        false
+		mode:      'bootstrap'
+		aria2:     ''
+		connected: false
+		detail:    'aria2 engine starts in Phase 1'
+	})
+}
+
+// dev_mode_from_env lets the Info command report the transport even when the
+// Spec was filled in by main.v: it is the same flag main.v checks.
+pub fn dev_mode_from_env() bool {
+	return os.getenv('FLUXGET_DEV') == '1'
+}
+
+// started_at is when the process booted, for the Info payload's uptime.
+pub fn started_at() string {
+	return time.now().format_ss_micro()
+}
+
+// default_backend is the Phase 0 handler set: exactly the commands declared in
+// app_manifest(). services.install fails loudly if the two ever disagree,
+// which is the point of going through the service model.
+//
+// Built by assignment, not a map literal. V 0.5.x cannot parse a map literal
+// whose values are functions: the bare `{ 'k': fn }` form silently yields an
+// empty map, and a typed `map[string]Handler{ 'k': fn }` literal does not
+// parse at all. The vails services/install_test.v says the same thing in a
+// comment and uses this exact shape, so the framework hit it first.
+pub fn default_backend() map[string]Handler {
+	mut backend := map[string]Handler{}
+	backend[app_name + '.ping'] = handle_ping
+	backend[app_name + '.info'] = handle_info
+	backend[app_name + '.health'] = handle_health
+	return backend
+}

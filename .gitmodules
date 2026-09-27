@@ -1,0 +1,3 @@
+[submodule "vendor/vails"]
+	path = vendor/vails
+	url = https://github.com/metif12/vails.git

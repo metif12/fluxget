@@ -1,0 +1,87 @@
+/* base.css — reset plus the Phase 0 boot screen. */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+	height: 100%;
+	margin: 0;
+}
+
+body {
+	background: var(--bg);
+	color: var(--text);
+	font-family: var(--font);
+	font-size: 14px;
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+}
+
+.boot {
+	max-width: 880px;
+	margin: 0 auto;
+	padding: var(--sp-8) var(--sp-6);
+}
+
+.boot__mark { color: var(--accent); }
+.boot__title {
+	margin: var(--sp-3) 0 0;
+	font-size: 30px;
+	font-weight: 600;
+	letter-spacing: -0.02em;
+}
+.boot__sub {
+	margin: var(--sp-1) 0 var(--sp-8);
+	color: var(--text-dim);
+}
+
+.cards {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	gap: var(--sp-3);
+}
+
+.card {
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r2);
+	padding: var(--sp-3) var(--sp-4);
+}
+
+.card__k {
+	margin: 0;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.card__v {
+	margin: var(--sp-2) 0 0;
+	font-family: var(--mono);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	word-break: break-all;
+}
+
+.card__v[data-state="ok"]   { color: var(--ok); }
+.card__v[data-state="warn"] { color: var(--warn); }
+.card__v[data-state="err"]  { color: var(--err); }
+
+.log {
+	margin: var(--sp-6) 0 0;
+	padding: var(--sp-3);
+	max-height: 200px;
+	overflow: auto;
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r2);
+	font-family: var(--mono);
+	font-size: 12px;
+	color: var(--text-dim);
+	white-space: pre-wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	* { transition: none !important; animation: none !important; }
+}

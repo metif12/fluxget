@@ -1,0 +1,55 @@
+/* tokens.css — the design tokens every other stylesheet reads.
+   Phase 0 ships only what the boot screen needs; Phase 2 fills in the rest.
+   No web fonts: the vails CSP is default-src 'self', so the type stack has to
+   come from the OS. */
+
+:root {
+	color-scheme: dark light;
+
+	--bg:            #0b0d10;
+	--surface:       #12151a;
+	--surface-hi:    #191d24;
+	--line:          #232830;
+	--line-strong:   #2f353f;
+
+	--text:          #e6e9ef;
+	--text-dim:      #9aa3b2;
+	--text-faint:    #6b7382;
+
+	--accent:        #4cc2ff;
+	--accent-dim:    #1d5f80;
+	--ok:            #43d18b;
+	--warn:          #f0b429;
+	--err:           #ff6b6b;
+
+	--r1: 4px;
+	--r2: 8px;
+	--r3: 12px;
+
+	--sp-1: 4px;
+	--sp-2: 8px;
+	--sp-3: 12px;
+	--sp-4: 16px;
+	--sp-6: 24px;
+	--sp-8: 32px;
+
+	--t-fast: 120ms;
+	--t:      180ms;
+	--ease:   cubic-bezier(.2, .8, .2, 1);
+
+	--font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+	--mono: "Cascadia Mono", "Consolas", ui-monospace, monospace;
+}
+
+[data-theme="light"] {
+	--bg:          #f6f7f9;
+	--surface:     #ffffff;
+	--surface-hi:  #f0f2f5;
+	--line:        #e0e4ea;
+	--line-strong: #c8ced8;
+	--text:        #14171c;
+	--text-dim:    #5a6472;
+	--text-faint:  #8b94a3;
+	--accent:      #0a6fb5;
+	--accent-dim:  #a9d6f2;
+}

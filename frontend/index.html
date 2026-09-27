@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fluxget — Phase 0</title>
+<link rel="stylesheet" href="css/tokens.css" />
+<link rel="stylesheet" href="css/base.css" />
+</head>
+<body>
+<!--
+  Phase 0 shell. It exists to prove the whole chain end to end:
+  dev server -> livereload -> bridge -> capability grant -> platform/handler,
+  in both transports. Real views land in Phase 2.
+-->
+<div class="boot" id="boot">
+	<div class="boot__mark" aria-hidden="true">
+		<svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+			<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
+		</svg>
+	</div>
+	<h1 class="boot__title">Fluxget</h1>
+	<p class="boot__sub">aria2 download manager · built on vails</p>
+
+	<div class="cards">
+		<article class="card" data-key="transport">
+			<h2 class="card__k">transport</h2>
+			<p class="card__v" id="v-transport">…</p>
+		</article>
+		<article class="card" data-key="bridge">
+			<h2 class="card__k">bridge</h2>
+			<p class="card__v" id="v-bridge">…</p>
+		</article>
+		<article class="card" data-key="engine">
+			<h2 class="card__k">engine</h2>
+			<p class="card__v" id="v-engine">…</p>
+		</article>
+		<article class="card" data-key="vails">
+			<h2 class="card__k">vails</h2>
+			<p class="card__v" id="vails">…</p>
+		</article>
+	</div>
+
+	<pre class="log" id="log"></pre>
+</div>
+
+<script src="js/boot.js"></script>
+</body>
+</html>
