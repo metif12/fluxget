@@ -10,7 +10,8 @@ V 0.5.2  ·  vails 0.2.0  ·  aria2 1.37  ·  no npm, no CDN, no bundler
 
 > **Status: Phase 1 complete.** The window opens, the bridge round-trips, and
 > **a real download runs**: Fluxget finds aria2c, spawns it, speaks JSON-RPC to
-> it, and shows the queue live. See [Roadmap](#roadmap).
+> it, and shows the queue live. Phases 2-8 are [re-planned](#roadmap) around
+> competitive parity with Surge.
 
 ![Phase 1: a real 1 MiB download, complete, with the Finished notice](tests/e2e_windows/phase1-download.png)
 
@@ -32,8 +33,8 @@ option honoured.
 
 vails is one day old: 14 commits, 8 of them on its first day, no git tags, no
 CI, and a hardcoded version string. Its roadmap says it will "freeze
-`application/` + `bridge/` API before starting" Phase 6 — so a breaking change
-is on the announced path.
+`application/` + `bridge/` API before starting" vails Phase 6 — so a breaking
+change is on the announced path.
 
 Fluxget is therefore built as a **showcase that cannot be held hostage by its
 framework**. Three mechanisms, and they are the interesting part of this repo:
@@ -47,7 +48,10 @@ framework**. Three mechanisms, and they are the interesting part of this repo:
 `grep -r COMPAT` lists every place where Fluxget implements something the
 framework will ship in the next release wave, with the upstream service named.
 
-The reasoning is in [ADR-0001](docs/ADR/0001-platform-seam.md).
+The reasoning is in [ADR-0001](docs/ADR/0001-platform-seam.md), the engine's
+life cycle in [ADR-0002](docs/ADR/0002-engine-lifecycle-and-tick-not-push.md),
+and the competitive scope in
+[ADR-0003](docs/ADR/0003-compete-without-owning-the-transfer.md).
 
 ---
 
@@ -143,13 +147,13 @@ adopting the upstream service is a one-line change rather than a rewrite.
 
 | Capability | Today | vails, when it lands | Switch |
 |---|---|---|---|
-| Open a folder / file | not yet (`shell/` is Phase 3) | `opener` (S1 wave 2) | `platform/natives.v`, by grant |
+| Open a folder / file | not yet (`shell/`, only if vails does not ship `opener` first) | `opener` (S1 wave 2) | `platform/natives.v`, by grant |
 | Finish notifications | in-app toast from the notice queue | `notification` | same |
 | Copy a magnet link | not yet | `clipboard` | same |
 | Single instance | Control API port as the lock (Phase 6) | `single-instance` (S2) | same |
 | Persistence | session file via aria2; no `store/` yet | `store` (S2) | same |
 | Window geometry | not yet | `window-state` | same |
-| Frontend `.d.ts` | `platform/host.v: dts_text`, from the manifest | `$for` reflection (Phase 7) | delete `dts_text` |
+| Frontend `.d.ts` | `platform/host.v: dts_text`, from the manifest | `$for` reflection (vails Phase 7) | delete `dts_text` |
 | Tray icon | **not implemented** | `tray` | documented, not built |
 | Global hotkeys | none | `global-shortcut` | documented, not built |
 
@@ -205,20 +209,59 @@ executable, since it never boots a window and so never touches `platform/`.
 
 ## Roadmap
 
+Re-planned in September 2026 around competitive parity with
+[Surge](https://github.com/SurgeDM/Surge), the TUI download manager this app
+competes with. The reasoning, and the one thing we chose not to build, are in
+[ADR-0003](docs/ADR/0003-compete-without-owning-the-transfer.md). Ordered by
+competitive value, not by what happened to be built first.
+
 | Phase | What | Gate |
 |---|---|---|
 | **0** ✅ | Repo, submodule, scripts, window, bridge | window opens, gate green |
 | **0.5** ✅ | The seam, the contract, `vails.lock`, compat reports | 13 contract tests green |
 | **1** ✅ | `aria2ctl/` + `core/` + `engine/`, real download in the UI | a real download visible in the window |
-| **2** | Design system, router, i18n, RTL, both themes, speed chart, `tools/pack` | rows update live, packed document runs |
-| **3** | pause/resume/remove/retry, settings, speed presets | full manual control |
-| **4** | Torrents: peers, trackers, file selection, seed policy | a magnet and a `.torrent` finish |
-| **5** | Scheduler: day windows plus conditional rules | windows really change the global limit |
-| **6** | Control API + the browser extension | a Chrome download reaches Fluxget |
-| **7** | aria2 setup page, pairing QR, logs, README with screenshots | clean build from scratch |
-| **8** | MCP server in V, over the Control API | an assistant can ask Fluxget for a download |
+| **2** | **Product feel** — design system, i18n with `fa` RTL, light + dark, keyboard shortcuts, speed charts, `tools/pack` | switch language and theme live; a chart redraws every tick; the packed document runs |
+| **3** | **Control + settings** — pause/resume/remove/retry/move, global and per-item limits, `store/` | every row operable; limits and settings survive a restart |
+| **4** | **Speed + mirrors** — adaptive connections, mirror sets with liveness probing, force-sequential streaming, checksums, `fluxget bench` | `bench` publishes numbers against aria2c/curl **including where we lose**; a dead mirror is dropped and the set continues |
+| **5** | **Torrents** — magnet and `.torrent`, peers, trackers, file selection, seed policy | a magnet and a `.torrent` both finish |
+| **6** | **Automation** — Control API, browser extension, CLI, headless mode, shell completion, autostart | a Chrome download reaches Fluxget; `fluxget add` drives a running instance |
+| **7** | **Scheduler** — presets, day windows, conditions | a window really changes the global limit |
+| **8** | **MCP server** — stdio, named tools, over the Control API | an assistant can ask Fluxget for a download |
 
-## What Phase 1 actually established
+### Where we already stand against Surge
+
+Reading this before planning a feature, because two of the three answers are
+"we already have this":
+
+- **BitTorrent and Metalink are ours and Surge's are not.** Its docs and topics
+  never mention them. aria2 gives us the swarm engine for free; Phase 5 is UI
+  and policy, not protocol work. If that is the first question a user asks —
+  and it usually is — we are ahead on it today.
+- **A window, not a terminal.** vails is a webview framework, so a TUI is
+  unreachable and we should not want one. The GUI is the wedge; the CLI
+  (Phase 6) is the honest answer to the automation story, and it needs no
+  webview.
+- **We lose the single-file speed comparison, on purpose.** Their published
+  benchmark claims 1.38× aria2c, and it comes from owning the transfer. See
+  ADR-0003 for what that costs and what we build instead.
+
+### What we will not build, and why
+
+Three of these are differences, not gaps. Recording them so they are not
+re-litigated as missing features:
+
+- **No TUI.** See above — there is no terminal in vails.
+- **No remote control on `0.0.0.0`.** Surge binds every interface with a bearer
+  token; our Control API is loopback-only. That is a security decision with a
+  reason in [CONTEXT.md](CONTEXT.md#control-api), and losing that comparison is
+  cheaper than reversing it.
+- **No macOS** until vails Phase 6. That is half of Surge's install surface
+  unavailable to us, and it is a framework constraint rather than a choice.
+
+Debrid support is genuinely worth doing — it is an HTTP source plugin — but it
+is not parity, so it is not on the roadmap.
+
+### What Phase 1 actually established
 
 Worth reading before Phase 2, because three of it was *finding out*:
 
@@ -253,13 +296,13 @@ rpc/              aria2 JSON-RPC client, injectable Transport
 aria2ctl/         locating, configuring and supervising aria2c
 core/             shared state, diffing, the notice queue
 engine/           the app-facing facade over aria2
+store/            settings and history, atomic writes (Phase 3)
+schedule/         a pure evaluator, testable against a table of times (Phase 7)
+api/              the Control API: the one remote surface (Phase 6)
+extension/        MV3 for Chrome and Firefox (Phase 6)
 mcp/              the MCP server: stdio in, Control API out (Phase 8)
-schedule/         a pure evaluator, testable against a table of times
-store/            settings and history, atomic writes
-api/              the loopback control API for the extension and the MCP server
 shell/            native fallbacks until vails ships the service
 frontend/         hand-written HTML/CSS/ES, no bundler
-extension/        MV3 for Chrome and Firefox
 tools/pack/       the micro-packer: frontend/** → one index.html (Phase 2)
 scripts/          sync-vails, test, build, dev, setup, ext, fetch-aria2,
                   check-isolation, capture-window
@@ -267,8 +310,9 @@ docs/ADR/         decisions that would be expensive to reverse
 tests/e2e_windows/  manual GUI proofs
 ```
 
-`schedule/`, `store/`, `api/`, `shell/`, `extension/`, `mcp/` and `tools/pack/`
-are still Phase 2+ and are listed as the shape they will take.
+`store/`, `schedule/`, `api/`, `extension/`, `mcp/`, `shell/` and `tools/pack/`
+do not exist yet; the phase in brackets is when each lands. `shell/` has no
+phase because it is only built if vails does not ship the service first.
 
 ## Licence
 
