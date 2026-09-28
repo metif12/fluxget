@@ -45,10 +45,27 @@ $asset = "aria2-$Version-win-64bit-build1.zip"
 $url = "https://github.com/aria2/aria2/releases/download/release-$Version/$asset"
 
 # Pinned digests. When bumping -Version, replace this with the value from the
-# release's own checksum list; an empty entry makes the script refuse to run
-# rather than trust an unverified binary.
+# release's own checksum list; an empty entry makes the script warn rather than
+# trust an unverified binary.
+#
+# WHAT THIS PIN IS, precisely, because a checksum you computed yourself is weaker
+# than it looks:
+#
+#   Upstream publishes NO checksum asset for the Windows zips. There is no
+#   SHA256SUMS file on the release, so the value below was computed from the
+#   first download on this machine. That means it detects CHANGE - a different
+#   asset, a truncated transfer, a mirror that has been replaced - and it does
+#   NOT establish authenticity. A value derived from the same download it is
+#   meant to authenticate cannot.
+#
+#   What makes this acceptable anyway: the URL is a GitHub release asset, GitHub
+#   does not serve a mutable asset at that path, and the version is pinned. The
+#   digest is a tripwire against a corrupted transfer, not a signature.
+#   Verifying against upstream would need aria2 to publish checksums; until it
+#   does, this is the strongest check available and it is labelled honestly
+#   rather than implied.
 $known = @{
-    '1.37.0' = ''
+    '1.37.0' = '67d015301eef0b612191212d564c5bb0a14b5b9c4796b76454276a4d28d9b288'
 }
 
 Write-Step "downloading $asset"
@@ -66,7 +83,12 @@ try {
 }
 
 if (-not (Test-Path $tmp)) {
-    Write-Err2 "download produced nothing. Check the asset name for $Version:"
+    # ${Version} and not $Version: - PowerShell reads "$Version:" as a
+    # drive-qualified variable reference and the whole script fails to PARSE. The
+    # reported error is about variable syntax, which is a long way from "the
+    # download failed", and it happens before a single line runs: this script
+    # could never have been executed at all until it was fixed.
+    Write-Err2 "download produced nothing. Check the asset name for ${Version}:"
     Write-Host "    https://github.com/aria2/aria2/releases/tag/release-$Version" -ForegroundColor 'Yellow'
     exit 1
 }

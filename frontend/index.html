@@ -3,26 +3,64 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Fluxget — Phase 0</title>
+<title>Fluxget</title>
 <link rel="stylesheet" href="css/tokens.css" />
 <link rel="stylesheet" href="css/base.css" />
 </head>
 <body>
 <!--
-  Phase 0 shell. It exists to prove the whole chain end to end:
-  dev server -> livereload -> bridge -> capability grant -> platform/handler,
-  in both transports. Real views land in Phase 2.
--->
-<div class="boot" id="boot">
-	<div class="boot__mark" aria-hidden="true">
-		<svg viewBox="0 0 32 32" width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-			<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
-		</svg>
-	</div>
-	<h1 class="boot__title">Fluxget</h1>
-	<p class="boot__sub">aria2 download manager · built on vails</p>
+  Phase 1. Still one page, still no bundler, still no design system - Phase 2
+  owns that. What changed is that every number on it is real:
 
-	<div class="cards">
+    * the status row is fed by fluxget.tick, the app's heartbeat;
+    * the queue is the live download list from that tick;
+    * the Add box hands a URL, a magnet or a .torrent to fluxget.add;
+    * the log is aria2's own stderr, drained by the tick.
+
+  There is no push from the native side. vails ADR-0010 forbids V->JS eval from
+  a worker, so the page polls - see js/boot.js. The interval is 1s, which is
+  fast enough to look live and slow enough that a tick is one loopback multicall.
+-->
+<div class="app" id="app">
+
+	<header class="topbar">
+		<div class="topbar__mark" aria-hidden="true">
+			<svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+				<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
+			</svg>
+		</div>
+		<div class="topbar__title">Fluxget</div>
+
+		<form class="addbar" id="addform" autocomplete="off">
+			<input class="addbar__input" id="addurl" type="text" spellcheck="false"
+				placeholder="https://  ·  magnet:?xt=urn:btih:…  ·  C:\path\to\file.torrent"
+				aria-label="URL, magnet link or path to a .torrent to download" />
+			<button class="addbar__btn" id="addbtn" type="submit">Add</button>
+		</form>
+	</header>
+
+	<!--
+	  The status row. `data-state` drives the colour, and it is the same three
+	  words base.css already used for the Phase 0 cards, so nothing new had to be
+	  invented for "this is broken".
+	-->
+	<section class="cards" id="cards">
+		<article class="card" data-key="engine">
+			<h2 class="card__k">engine</h2>
+			<p class="card__v" id="v-engine">…</p>
+		</article>
+		<article class="card" data-key="speed">
+			<h2 class="card__k">speed</h2>
+			<p class="card__v" id="v-speed">…</p>
+		</article>
+		<article class="card" data-key="queue">
+			<h2 class="card__k">queue</h2>
+			<p class="card__v" id="v-queue">…</p>
+		</article>
+		<article class="card" data-key="aria2">
+			<h2 class="card__k">aria2c</h2>
+			<p class="card__v" id="v-aria2">…</p>
+		</article>
 		<article class="card" data-key="transport">
 			<h2 class="card__k">transport</h2>
 			<p class="card__v" id="v-transport">…</p>
@@ -31,17 +69,52 @@
 			<h2 class="card__k">bridge</h2>
 			<p class="card__v" id="v-bridge">…</p>
 		</article>
-		<article class="card" data-key="engine">
-			<h2 class="card__k">engine</h2>
-			<p class="card__v" id="v-engine">…</p>
-		</article>
-		<article class="card" data-key="vails">
-			<h2 class="card__k">vails</h2>
-			<p class="card__v" id="vails">…</p>
-		</article>
-	</div>
+	</section>
 
-	<pre class="log" id="log"></pre>
+	<!--
+	  The setup screen, shown only when the engine has no binary. Kept in the DOM
+	  rather than swapped in, because aria2 not being installed is a state of the
+	  same app and not a different app - and a user who installs it mid-session
+	  should see the queue appear without a reload.
+	-->
+	<section class="setup" id="setup" hidden>
+		<h2 class="setup__title">aria2c is not installed</h2>
+		<p class="setup__body" id="setup-detail"></p>
+		<pre class="setup__cmd">.\scripts\fetch-aria2.ps1</pre>
+		<p class="setup__note">
+			Then restart Fluxget. It picks the binary up from <code>runtime\</code> automatically.
+		</p>
+	</section>
+
+	<main class="panes">
+		<section class="pane pane--queue">
+			<div class="pane__head">
+				<h2 class="pane__title">downloads</h2>
+				<span class="pane__count" id="queue-count">0</span>
+			</div>
+			<!--
+			  The empty message is a SIBLING of #rows, not a child of it. renderRows
+			  clears #rows wholesale to rebuild it, so anything living in there is
+			  destroyed on the first re-render - and the next call then throws on a
+			  null reference, which is a miserable bug to chase from a symptom in the
+			  status row.
+			-->
+			<p class="empty" id="empty">Nothing queued. Add a URL above.</p>
+			<div class="rows" id="rows"></div>
+		</section>
+
+		<aside class="pane pane--log">
+			<div class="pane__head">
+				<h2 class="pane__title">engine log</h2>
+				<span class="pane__count" id="log-count">0</span>
+			</div>
+			<!-- aria2's stderr, newest first. The ring buffer on the native side
+			     keeps the last 200 lines, so this is scrollback and not a file. -->
+			<pre class="log" id="log"></pre>
+		</aside>
+	</main>
+
+	<div class="toasts" id="toasts" aria-live="polite"></div>
 </div>
 
 <script src="js/boot.js"></script>

@@ -8,15 +8,23 @@ that uses the OS webview instead of bundling a browser engine.
 V 0.5.2  ·  vails 0.2.0  ·  aria2 1.37  ·  no npm, no CDN, no bundler
 ```
 
-> **Status: Phase 0 + 0.5 complete.** The window opens, the bridge round-trips,
-> and the download engine lands in Phase 1. See [Roadmap](#roadmap).
+> **Status: Phase 1 complete.** The window opens, the bridge round-trips, and
+> **a real download runs**: Fluxget finds aria2c, spawns it, speaks JSON-RPC to
+> it, and shows the queue live. See [Roadmap](#roadmap).
 
-![Phase 0: the whole chain proven end to end](tests/e2e_windows/phase0-bridge.png)
+![Phase 1: a real 1 MiB download, complete, with the Finished notice](tests/e2e_windows/phase1-download.png)
 
-That screenshot is not a mockup. It is the real window: the real dev server, the
-real `bridge.Router`, the real capability gate — `ping -> pong` is a JS → V → JS
-round trip, and the log line under it is an **ungranted** command being refused
-with `forbidden:`, which is the security property the whole design rests on.
+That screenshot is not a mockup. The real window, the real dev server, the real
+`bridge.Router`, a real `aria2c` child process, and a real 100% HTTP transfer.
+The `1Mb.dat` row is the file's own name (it took three bugs to get right), and
+the `Finished 1Mb.dat` toast is the notice queue noticing a transition it was
+told about by diffing two ticks — nothing pushed it. The `ping → pong` round trip
+and the ungranted command refused with `forbidden:` are the Phase 0 chain, still
+working now that the handlers hold state.
+
+The second proof needs no network at all: [the session round-trip](tests/e2e_windows/phase1-session-resume.png)
+shows a queue that arrived from a hand-written `--input-file`, with the `out=`
+option honoured.
 
 ---
 
@@ -118,9 +126,15 @@ files, and `v fmt -w .` would rewrite the submodule's working tree.
 **The frontend polls, it is not pushed to.** vails ADR-0010 requires V→JS eval
 to happen on the webview main thread, and a `Ctx` cannot emit from a spawned
 worker. So the UI runs its own `setInterval` against `fluxget.tick`, which makes
-one `system.multicall` per beat and returns a snapshot. Notifications queue up
-in `core/` and ride along in the next snapshot's `notices` array. Nothing ever
-calls `Ctx.emit` from a worker.
+one `system.multicall` per beat and returns a snapshot. Notifications are
+diffed between ticks in `core/` and ride along in the response. Nothing ever
+calls `Ctx.emit` from a worker — and nothing calls it at all yet.
+
+The gate is the gate: `.\scripts\test.ps1` is contract, isolation, `v fmt` and
+`v test` in one command, and `v test` opens no window and starts no process. The
+interesting part is what the gate **cannot** reach, which is why
+[tests/e2e_windows](tests/e2e_windows/README.md) exists and why Phase 1 says
+loudly that talking to a real aria2 found three bugs the suite could not.
 
 ## Feature ownership
 
@@ -129,13 +143,13 @@ adopting the upstream service is a one-line change rather than a rewrite.
 
 | Capability | Today | vails, when it lands | Switch |
 |---|---|---|---|
-| Open a folder / file | `shell/` (`explorer.exe`) | `opener` (S1 wave 2) | `platform/natives.v`, by grant |
-| Finish notifications | in-app toast + `dialog.message` | `notification` | same |
-| Copy a magnet link | `shell/` (`clip`) | `clipboard` | same |
-| Single instance | Control API port as the lock | `single-instance` (S2) | same |
-| Persistence | `store/`, atomic JSON | `store` (S2) | same |
-| Window geometry | `store` | `window-state` | same |
-| Frontend `.d.ts` | `platform/dts.v` from the manifest | `$for` reflection (Phase 7) | delete `dts.v` |
+| Open a folder / file | not yet (`shell/` is Phase 3) | `opener` (S1 wave 2) | `platform/natives.v`, by grant |
+| Finish notifications | in-app toast from the notice queue | `notification` | same |
+| Copy a magnet link | not yet | `clipboard` | same |
+| Single instance | Control API port as the lock (Phase 6) | `single-instance` (S2) | same |
+| Persistence | session file via aria2; no `store/` yet | `store` (S2) | same |
+| Window geometry | not yet | `window-state` | same |
+| Frontend `.d.ts` | `platform/host.v: dts_text`, from the manifest | `$for` reflection (Phase 7) | delete `dts_text` |
 | Tray icon | **not implemented** | `tray` | documented, not built |
 | Global hotkeys | none | `global-shortcut` | documented, not built |
 
@@ -164,18 +178,42 @@ live badge, and an options page for pairing.
 |---|---|---|
 | **0** ✅ | Repo, submodule, scripts, window, bridge | window opens, gate green |
 | **0.5** ✅ | The seam, the contract, `vails.lock`, compat reports | 13 contract tests green |
-| **1** | `rpc/` + `aria2ctl/` + snapshot | a real download visible in the UI |
-| **2** | Design system, router, i18n, RTL, both themes, speed chart | rows update live |
-| **3** | pause/resume/remove/retry, add dialogs, speed presets | full manual control |
+| **1** ✅ | `aria2ctl/` + `core/` + `engine/`, real download in the UI | a real download visible in the window |
+| **2** | Design system, router, i18n, RTL, both themes, speed chart, `tools/pack` | rows update live, packed document runs |
+| **3** | pause/resume/remove/retry, settings, speed presets | full manual control |
 | **4** | Torrents: peers, trackers, file selection, seed policy | a magnet and a `.torrent` finish |
 | **5** | Scheduler: day windows plus conditional rules | windows really change the global limit |
 | **6** | Control API + the browser extension | a Chrome download reaches Fluxget |
 | **7** | aria2 setup page, pairing QR, logs, README with screenshots | clean build from scratch |
 
+## What Phase 1 actually established
+
+Worth reading before Phase 2, because three of it was *finding out*:
+
+- **The engine is a supervised child, and readiness is a polled phase, never an
+  assumption.** A successful spawn proves nothing — aria2 still has to bind its
+  RPC port — so "ready" means exactly one thing: `aria2.getVersion` answered.
+  A crash loop is 3 restarts in 60s with a 1s/2s/4s backoff, then silence with an
+  explanation. The reasoning, and the three designs that are ruled out, are in
+  [ADR-0002](docs/ADR/0002-engine-lifecycle-and-tick-not-push.md).
+- **A missing aria2c must still open a window**, because that window *is* the
+  Setup screen. So the engine starts from `on_ready`, not before `boot`.
+- **The RPC port is 16800, not aria2's 6800.** Guessing wrong is not a clean
+  error: Fluxget would reach the *user's* aria2, get an auth failure, and report
+  "engine not ready" while the daemon it spawned died on the bind.
+- **Nothing is ever pushed.** `os.Process.pipe_read` is non-blocking, so the
+  engine's stderr is drained *by the tick*, and there is no reader thread to own
+  state and race on it.
+- **The fake transport cannot catch a wire-format bug.** 32 green tests were not
+  enough: the real HTTP transport timed out on every call (a `Duration` compared
+  against a millisecond budget), the multicall sent its arguments as a JSON
+  string, and rows were labelled with folders. All three were found by talking to
+  a real aria2, and all three now have a test that fails on the broken shape.
+
 ## Repository layout
 
 ```
-main.v            bootstrap: transport selection, then platform.boot
+main.v            bootstrap: resolve the root, build the App, then platform.boot
 vails.json        window + capability grants (a command name IS a grant)
 vails.lock        last vails revision that passed the gate
 platform/         the ONLY code that knows vails exists
@@ -187,13 +225,17 @@ schedule/         a pure evaluator, testable against a table of times
 store/            settings and history, atomic writes
 api/              the loopback control API for the extension
 shell/            native fallbacks until vails ships the service
-frontend/         hand-written HTML/CSS/ES modules, no bundler
+frontend/         hand-written HTML/CSS/ES, no bundler
 extension/        MV3 for Chrome and Firefox
-tools/pack/       the micro-packer: frontend/** → one index.html
-scripts/          sync-vails, test, build, dev, setup, ext, check-isolation
+tools/pack/       the micro-packer: frontend/** → one index.html (Phase 2)
+scripts/          sync-vails, test, build, dev, setup, ext, fetch-aria2,
+                  check-isolation, capture-window
 docs/ADR/         decisions that would be expensive to reverse
 tests/e2e_windows/  manual GUI proofs
 ```
+
+`schedule/`, `store/`, `api/`, `shell/`, `extension/` and `tools/pack/` are still
+Phase 2+ and are listed as the shape they will take.
 
 ## Licence
 

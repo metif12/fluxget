@@ -26,6 +26,7 @@ import capabilities
 import config
 import dev
 import events
+import os
 import services
 import webview
 
@@ -347,9 +348,16 @@ pub fn run_contract() ContractReport {
 	// Our own manifest must be self-consistent: a handler for every declared
 	// command, all in our own namespace. services.install is the framework's
 	// own enforcement, so a green install is the assertion.
+	//
+	// A throwaway App, built here and discarded. Phase 1's handlers are closures
+	// over state, so the backend cannot be built without one - and this is the
+	// reason that is safe: new_app() mints a secret and stops. It starts no
+	// process and opens no socket, which is what keeps run_contract runnable
+	// inside `v test` and from main.v's dev-mode preflight alike.
 	mut own := bridge.new_router()
 	svc := app_manifest()
-	rep.manifest_ok = install_ok(mut own, svc, default_backend())
+	rep.manifest_ok = install_ok(mut own, svc, default_backend(new_app(os.getwd(),
+		false, '')))
 	for c in svc.commands {
 		if !c.name.starts_with(app_name + '.') {
 			rep.notes << ('command outside our namespace: ' + c.name)

@@ -48,6 +48,15 @@ pub mut:
 	// decode into string, a missing key leaves it empty, so callers ask
 	// is_removed() rather than comparing against a literal.
 	removed string
+	// file_path is the first entry of aria2's `files` array: the full path of the
+	// payload. It is the ONLY place a plain file's real name appears - `dir` is
+	// the folder, which is why a row used to be labelled with the name of the
+	// directory it was downloading into.
+	//
+	// Decoded from the status rather than fetched with getFiles(), because a
+	// second call per row per tick would be one round trip per download to learn
+	// something the snapshot already contains.
+	file_path string
 }
 
 // is_removed reports whether aria2 marked this result as removed from disk.
@@ -102,10 +111,25 @@ pub fn (s Status) eta_seconds() i64 {
 	return remaining / s.download_speed
 }
 
-// display_name is the most human name aria2 gives us: for a torrent, the
-// torrent's own directory; for a plain file, the file name; then the uri, and
-// finally the gid, so a row is never blank.
+// display_name is the most human name aria2 gives us: the file's own path, then
+// the torrent's directory, then the uri, and finally the gid, so a row is never
+// blank.
+//
+// The order starts with file_path because `dir` alone is not a name. A plain
+// HTTP download into /downloads/linux-image/foo.iso reports dir as the DIRECTORY,
+// so a row labelled from `dir` reads "linux-image" - the name of a folder, shown
+// as if it were the file. That was not a hypothetical: the first end-to-end run
+// rendered a 100 MB file as "downloads".
+//
+// For a torrent there is no single payload path worth showing, so the torrent's
+// own directory is the right answer and stays second.
 pub fn (s Status) display_name(uri string) string {
+	if s.file_path != '' {
+		base := last_segment(s.file_path)
+		if base != '' {
+			return base
+		}
+	}
 	if s.info_hash != '' {
 		return first_segment(s.dir)
 	}

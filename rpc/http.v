@@ -14,22 +14,44 @@
 module rpc
 
 import net.http
-import time
 
 // http_transport returns a Transport that POSTs a JSON body to an endpoint.
 //
-// http.post_json rather than the Request/FetchConfig pair: it already sets the
-// content type and returns the body, and the lower-level API wants three
-// arguments and a config struct, which is more surface than this needs.
+// Built from http.fetch with an explicit config rather than http.post_json,
+// because the timeout is the point and post_json does not accept one. Three
+// things that were wrong before, all found by the Phase 1 end-to-end run rather
+// than by a test, because the rpc suite only ever used the fake transport:
+//
+//   * The budget was compared against the wrong unit. `elapsed` is a
+//     time.Duration whose value is NANOSECONDS, and it was compared to a
+//     millisecond number: 1_000_000 > 5_000 is true after ONE millisecond, so
+//     every single real call reported a timeout. Nothing caught it because
+//     http_transport had no test and no caller until the app talked to a real
+//     aria2. `rpc: ... took 1.000msms (limit 5000ms)` is what the UI showed.
+//   * The measurement was a REPORT, not a bound. The elapsed time was only
+//     checked after post_json returned, so a daemon that never answered blocked
+//     forever and the check never ran. read_timeout/write_timeout are handed to
+//     the socket layer, so the bound is now actually enforced.
+//   * Duration.str() already prints "ms", so the message had "msms" in it.
 pub fn http_transport(endpoint string, timeout_ms int) Transport {
 	return fn [endpoint, timeout_ms] (body string) !string {
-		started := time.now()
-		res := http.post_json(endpoint, body) or {
-			return error('rpc: ${endpoint}: ' + err.msg())
+		// A Duration is nanoseconds internally, and the config wants i64
+		// nanoseconds, so the millisecond budget is scaled explicitly. A zero or
+		// negative budget means "no bound of our own", which leaves net.http's
+		// own 30s defaults alone rather than setting a nonsensical zero.
+		budget := i64(timeout_ms) * 1000000
+		mut cfg := http.FetchConfig{
+			url:    endpoint
+			method: .post
+			data:   body
+			header: http.new_header(key: .content_type, value: 'application/json')
 		}
-		elapsed := time.now() - started
-		if timeout_ms > 0 && elapsed > timeout_ms {
-			return error('rpc: ${endpoint} took ${elapsed}ms (limit ${timeout_ms}ms)')
+		if budget > 0 {
+			cfg.read_timeout = budget
+			cfg.write_timeout = budget
+		}
+		res := http.fetch(cfg) or {
+			return error('rpc: ${endpoint}: ' + err.msg())
 		}
 		return res.body
 	}

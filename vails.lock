@@ -1,6 +1,6 @@
 {
-    "sha":  "7e11fe22ecce47a06bb2c720842a159d0638c5d4",
-    "checked":  "2026-09-27T12:07:07.0753892Z",
+    "sha":  "ea96ecc199dbad980d3c2625eb218cda76b33be8",
+    "checked":  "2026-09-27T13:13:34.0056031Z",
     "fluxget":  "0.1.0",
-    "note":  "vails: docs for Phase 5 S1 wave 1 (ADR-0014, CONTEXT, ROADMAP, READMEs)"
+    "note":  "vails: ADR-0015 + docs for Phase 5 S1 wave 2, released as 0.3.0"
 }

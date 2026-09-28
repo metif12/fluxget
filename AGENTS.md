@@ -97,16 +97,98 @@ by hand to make a build pass.
 - Tests are pure. `v test` never opens a window and never starts `aria2c`; the
   rpc client takes an injected `Transport` for exactly this reason.
 
+### How state reaches a handler without a global
+
+A bridge handler's signature is fixed — `fn (params string) !string` — so there
+is nowhere to thread state through it, and "no globals" rules out the obvious
+workaround. The pattern: the state is a **heap** object, and the handlers are
+**closures** that capture it.
+
+```v
+@[heap]
+pub struct App { pub mut: state &core.State }
+
+pub fn default_backend(app &App) map[string]Handler {
+	mut backend := map[string]Handler{}
+	mut a := app                                  // REQUIRED, see below
+	backend['fluxget.tick'] = fn [mut a] (_ string) !string { return a.tick_json() }
+	return backend
+}
+```
+
+Two rules that are not obvious:
+
+- `mut a := app` before the closure is **load-bearing**. A V closure gets a *copy*
+  of what it captures unless the capture is mutable. Drop it and every handler
+  mutates a private copy.
+- The build then prints `` `app` is immutable, cannot have a mutable reference
+  to an immutable object ``. **The notice is wrong.** `App` is `@[heap]` and
+  shared by pointer, so the mutation lands on the one object.
+  `platform/contract_test.v::test_two_commands_see_the_same_state` proves it:
+  push a notice onto the state, call `fluxget.tick` through the router, require
+  the notice back. If that test fails, believe the test.
+
 ### V traps this codebase already paid for
 
-`platform/contract.v` keeps the full list with explanations. The two that bite
-hardest:
+`platform/contract.v` keeps the original list with explanations. The Phase 1
+list is below, and each one is recorded in the file that hit it.
 
 - A function returning only `!` yields a **bool**, not a Result. `f() == none`
   is always false; `f() != none` is always true. Use `f() or { }`. The helper
   `install_ok` exists so nobody has to remember.
 - A map literal with function values does not work. Build maps with
   `mut m := map[string]F{}` plus assignment.
+- `!` **cannot propagate inside `assert`**: `assert f()! == x` fails to compile
+  with "to propagate a Result, the call must also return a Result type", because
+  `assert` is a statement. Use a helper that returns the value and asserts.
+- A `mut` method cannot be called on a temporary. `eng(f).add(x)` does not
+  compile however it is parenthesised — bind `mut e := eng(f)` first.
+- `if x := expr` is only legal when `expr` is an **Option or a Result**. It is a
+  hard error on a `string` or an `int`, so `if p := os.getenv(..)` and
+  `if n := p.int()` both fail. Use `os.getenv_opt` and `strconv.atoi`.
+- `import crypto.rand` is **miscompiled**: the codegen drops the qualifier and
+  emits `string__bytes(crypto.rand)`, a hard C error at link time with a clean
+  comptime. The alias form works and is load-bearing:
+  `import crypto.rand as csprng`.
+- A `_test.v` file is compiled **into** the module under test, not beside it.
+  So its top-level names share a namespace (`const sep` here collided with a
+  local `sep` in the module), and any `fn test_*` in it is treated as a test to
+  run — a helper called `test_app` is rejected as an "invalid test signature".
+- `init:` requires `len:`. `[]T{cap: n, init: v}` is a hard error, and the trap
+  goes the other way too: `[]T{len: n}` on a sum-type array is only a *warning*.
+- Numeric literal type suffixes do not exist in 0.5.2: `1700000000000i64` and
+  `1.44f64` are "unsuitable digit". Use a cast — and note an untyped constant
+  expression is evaluated as `int`, so `2 * 1024 * 1024 * 1024` overflows.
+- `String.index_of` does not exist; `String.index` returns `?int`. The unknown
+  method then cascades into unrelated-looking errors three lines later.
+- `String.trim_space()` takes no cutset, and there is no `trim(cutset)`.
+- `map[string]T{cap: n}` is rejected: "explicit `map` initialization does not
+  support parameters".
+- No float format specifier: `${v:0.1f}` is "unsuitable digit", there is no
+  `str_float_precision`, and `strconv.ftoa_64` is scientific. See
+  `engine/limits.v` for the integer-arithmetic version.
+
+### One claim in this file that is false
+
+`rpc/types.v` says "Comments in this project are ASCII only ... scripts/test.ps1
+enforces it". **No script enforces it**, and 8 of our own `.v` files contain
+non-ASCII bytes (em-dashes) with a green gate. So the stated *reason* — V 0.5.2's
+scanner mis-terminating a multi-byte comment — is unverified: the code compiles
+and the tests pass with those bytes present. New files stay ASCII, and
+`v fmt` keeps its place as the formatting authority, but nobody should read the
+enforcement as a checked property. Fix the claim or add the check; do not leave
+it as an unbacked reason.
+
+### Two V facts this project's design depends on
+
+- **`os` has no `find_executable` and no `which`.** The PATH walk in
+  `aria2ctl/locate.v` is ours, and it is a pure function so the search *order* is
+  testable on a machine with no aria2c — which is most machines.
+- **`webview.Config` has `on_ready` and no close hook.** `webview.run` returns
+  after the window closes, so the engine shutdown belongs in `main.v` after
+  `platform.boot` returns, and the `App` is built in `main.v` so somebody owns
+  its lifetime. `boot()` cannot own it: a temporary inside `boot()` would be shut
+  down by luck.
 
 ## 5. Wire format
 
@@ -129,6 +211,11 @@ spawned worker is a platform violation. So:
 - Notifications are queued in `core/` and drained into the next tick response.
 - A background watcher may exist for the browser extension's badge, but it must
   never touch `webview.Ctx.emit`.
+- A handler may not `time.sleep`. A scheduled restart records *when* it is due
+  and the tick performs it (ADR-0002).
+
+The reasoning, and the two designs that are ruled out because of this, are in
+[ADR-0002](docs/ADR/0002-engine-lifecycle-and-tick-not-push.md).
 
 ## 7. Definition of done
 
@@ -137,3 +224,20 @@ spawned worker is a platform violation. So:
 - A `// COMPAT(x)` marker on anything with an upstream replacement coming
 - A `docs/ADR/` entry for a decision that would be expensive to reverse
 - `vails.lock` re-stamped by `sync-vails.ps1`, never by hand
+
+### And, since Phase 1
+
+- **A test that cannot fail is worse than no test.** Two bugs here survived
+  32 green tests because the assertions passed on the broken shape: the multicall
+  sent its arguments as a JSON *string* while the test asserted
+  `contains('[0,10]')`, which matches happily inside that string. Assert the
+  **type** and the **shape** of what crosses a boundary, not a substring of it.
+- **The fake transport cannot catch a wire-format bug.** `rpc.Fake` returns
+  canned responses, so it never validates a request. Everything about how a
+  request is *shaped* is unverified until a real aria2 answers. When a protocol
+  detail is load-bearing, check it against the real thing with `curl` and pin
+  what you find in the fixture — that is how aria2's nested multicall results and
+  its "no token on the outer call" rule were established.
+- **A screenshot must be checked.** `scripts/capture-window.ps1` refuses to write
+  a blank frame, because a capture that silently failed looks exactly like a
+  successful one.

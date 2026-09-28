@@ -183,7 +183,23 @@ const fixture_global_option = '{"max-overall-download-limit":"0","max-overall-up
 // A whole snapshot as system.multicall would return it: an array of per-call
 // results, in request order, inside a complete JSON-RPC envelope. Serve it with
 // ok_envelope, not ok_raw - it already has the envelope.
+//
+// Each result is WRAPPED in its own single-element array, because that is what a
+// real aria2 does (verified against 1.37.0, not assumed): a sub-call that
+// succeeds comes back as `[result]`, and one that fails comes back as a bare
+// `{code, message}` object with no wrapper at all.
+//
+// This fixture was a FLAT array for most of the project's life, and the tests
+// were green, because a fake that does not reproduce the wire format cannot catch
+// a client that misreads it. It now matches, which is the only reason it is
+// useful.
 fn snapshot_body(stat string, active string, waiting string, stopped string) string {
-	return '{"jsonrpc":"2.0","id":"1","result":[' + stat + ',' + active + ',' + waiting + ',' +
-		stopped + ',' + fixture_version + ',' + fixture_global_option + ']}'
+	return '{"jsonrpc":"2.0","id":"1","result":[' + wrap(stat) + ',' + wrap(active) + ',' +
+		wrap(waiting) + ',' + wrap(stopped) + ',' + wrap(fixture_version) + ',' +
+		wrap(fixture_global_option) + ']}'
+}
+
+// wrap renders one sub-call's result in aria2's success wrapper.
+fn wrap(result string) string {
+	return '[' + result + ']'
 }

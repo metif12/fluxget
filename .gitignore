@@ -16,6 +16,12 @@
 # aria2c is fetched by scripts/fetch-aria2.ps1, never committed (GPL)
 /runtime/
 
+# Where aria2c downloads land, by default (aria2ctl.conf_for). The default is
+# under the project so a dev run needs no configuration and a `rm -rf` is a
+# complete cleanup; a real install points --dir at the user's Downloads folder
+# in Phase 3's settings.
+/downloads/
+
 # Development logs
 *.log
 logs/

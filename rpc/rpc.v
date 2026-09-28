@@ -106,15 +106,39 @@ fn (c Client) authed(params []json2.Any) []json2.Any {
 	return out
 }
 
-// call performs one JSON-RPC request and returns the raw `result` member, still
-// as JSON. Typed wrappers decode it; this stays untyped so a new aria2 field
-// never needs a client change.
+// call performs one JSON-RPC request, authenticating it, and returns the raw
+// `result` member, still as JSON. Typed wrappers decode it; this stays untyped so
+// a new aria2 field never needs a client change.
 pub fn (mut c Client) call(method string, params []json2.Any) !json2.Any {
+	return c.call_with(method, c.authed(params))
+}
+
+// call_with performs a request whose params are ALREADY final, with no
+// authentication applied.
+//
+// It exists for one caller, and the reason is not cosmetic. system.multicall
+// takes the batch of sub-calls as its ONLY argument, and each sub-call carries
+// its own token:
+//
+//   correct:  "params": [ [ {"methodName":...,"params":["token:x"]}, ... ] ]
+//   rejected: "params": [ "token:x", [ {"methodName":...} ] ]
+//                                     ^ aria2: "The parameter at 0 has wrong type."
+//
+// Verified against aria2 1.37.0 with curl, both ways: the second form is refused,
+// and the batch is NOT authorised by a token of its own - dropping the inner
+// tokens instead returns `Unauthorized` per sub-call. So the token belongs to the
+// sub-calls and nowhere else, and the one call that must not be auto-authed is
+// the batch itself.
+//
+// The mistake this prevents is easy to make and hard to see: every other method
+// wants the token prepended, so a helper that always prepends it is right
+// everywhere except here.
+fn (mut c Client) call_with(method string, params []json2.Any) !json2.Any {
 	mut req := map[string]json2.Any{}
 	req['jsonrpc'] = json2.Any('2.0')
 	req['id'] = json2.Any(c.next_request_id())
 	req['method'] = json2.Any(method)
-	req['params'] = json2.Any(c.authed(params))
+	req['params'] = json2.Any(params)
 	body := json2.encode(req)
 
 	transport := c.transport or {
@@ -159,25 +183,97 @@ pub fn (mut c Client) multicall(calls []Call) ![]json2.Any {
 	if calls.len == 0 {
 		return []json2.Any{}
 	}
+	// The outer call carries NO token - see call_with for why - and each sub-call
+	// carries its own, prepended by the same authed() every other call uses.
+	//
+	// Two wrong shapes got here first, and both are worth recording because
+	// neither could be caught by the fake transport, which returns canned
+	// responses and never validates a request:
+	//
+	//   params << json2.Any(json2.encode(c2.params))
+	//       -> "params":["token:x","[0,10]"]  the args as one STRING
+	//          real aria2: "The parameter at 0 has wrong type."
+	//
+	//   params << json2.Any(c2.params)
+	//       -> "params":["token:x",[0,10]]    the args as a NESTED array
+	//          real aria2: the same complaint; positional arguments are read from
+	//          a flat list.
+	//
+	//   and routing the batch through call() instead of call_with()
+	//       -> "params":["token:x",[...]]     a token beside the batch
+	//          real aria2: the same complaint again.
+	//
+	// The assertion that existed, `body.contains('[0,10]')`, passed against all
+	// three: the substring occurs inside a quoted string, inside a nested array,
+	// and nowhere near the correct flat list.
+	//
+	// test_the_multicall_params_are_arrays_and_not_strings now checks the shape,
+	// which is the thing that was actually wrong.
 	mut inner := []json2.Any{len: calls.len}
 	for i, c2 in calls {
-		// Each sub-call carries the token too, or aria2 rejects the inner ones
-		// even though the outer system.multicall was authorised.
-		mut params := [json2.Any('token:${c.secret}')]
-		params << json2.Any(json2.encode(c2.params))
 		mut entry := map[string]json2.Any{}
 		entry['methodName'] = json2.Any(c2.method)
-		entry['params'] = json2.Any(params)
+		entry['params'] = json2.Any(c.authed(c2.params))
 		inner[i] = json2.Any(entry)
 	}
-	res := c.call('system.multicall', [json2.Any(inner)]) or { return err }
+	res := c.call_with('system.multicall', [json2.Any(inner)]) or { return err }
 	// A separate statement rather than `return opt_arr(res) or { ... }`: when a
 	// decode goes wrong the message needs to carry what actually arrived, and
 	// inlining it in the return expression lost that.
 	arr := opt_arr(res) or {
 		return error('rpc: system.multicall did not return an array (got: ${res.str()})')
 	}
-	return arr
+	return unwrap_multicall(arr)
+}
+
+// unwrap_multicall turns aria2's nested result into one result per call.
+//
+// The nesting is aria2's, verified against 1.37.0 rather than assumed:
+//
+//   a call that SUCCEEDS  ->  [ result ]        a single-element ARRAY
+//   a call that FAILS     ->  { code, message } a BARE error object
+//
+// So "the i-th element is the i-th call's result" - which is what this function's
+// first version assumed and what its comment claimed - is wrong in both
+// directions: a success arrives wrapped, and a failure arrives not wrapped at
+// all. Decoding without unwrapping produced "expected a global stat object" from
+// a call that had in fact answered correctly.
+//
+// The two shapes are kept distinct rather than normalised into one, because
+// as_sub_result needs to tell them apart to report WHICH call failed.
+fn unwrap_multicall(arr []json2.Any) []json2.Any {
+	mut out := []json2.Any{len: arr.len, init: json2.Any('')}
+	for i, item in arr {
+		if wrapped := opt_arr(item) {
+			// A one-element array is the success wrapper. Anything else is left
+			// alone: a shorter or longer array is not something to guess at.
+			if wrapped.len == 1 {
+				out[i] = wrapped[0]
+			} else {
+				out[i] = item
+			}
+		} else {
+			// A bare object here is aria2's per-call error; it is passed through
+			// so as_sub_result can name it.
+			out[i] = item
+		}
+	}
+	return out
+}
+
+// as_sub_result is one slot of a multicall, as a value.
+//
+// A slot holding an error object is an error, and the message names the CALL,
+// because a snapshot that fails with "expected a list of statuses" tells nobody
+// which of the six calls went wrong. With this, it says
+// "system.multicall: aria2.tellWaiting failed: 1: No such method: ...".
+pub fn as_sub_result(name string, a json2.Any) !json2.Any {
+	if m := opt_map(a) {
+		if 'code' in m {
+			return error('system.multicall: ${name} failed: ${describe_error(a)}')
+		}
+	}
+	return a
 }
 
 // Call is one entry in a multicall.
@@ -239,7 +335,28 @@ fn as_status(a json2.Any) !Status {
 		verified_length:          i64_of(m, 'verifiedLength')
 		verify_integrity_pending: bool_of(m, 'verifyIntegrityPending')
 		removed:                  removed_of(m)
+		file_path:                first_file_path(m)
 	}
+}
+
+// first_file_path reads files[0].path.
+//
+// A Download may have several files - a torrent with forty files is still one
+// Download (CONTEXT.md) - and only the first is decoded, because that is all a
+// row label needs and the rest is the detail panel's business, fetched on demand
+// with getFiles().
+//
+// A missing or malformed `files` yields '' and display_name falls back, rather
+// than failing the whole status: `files` is absent from some aria2 answers and
+// absent data is not an error.
+fn first_file_path(m map[string]json2.Any) string {
+	arr := opt_arr(m['files'] or { json2.Any('') }) or { return '' }
+	for item in arr {
+		if f := opt_map(item) {
+			return str_of(f, 'path')
+		}
+	}
+	return ''
 }
 
 // removed_of reads the `removed` member, which was a boolean on older aria2 and
@@ -442,18 +559,23 @@ pub mut:
 
 // snapshot does the whole world in one request. This is the function the UI
 // heartbeat calls, so its cost is the largest single latency in the app.
+//
+// Each of the six slots goes through as_sub_result, so a sub-call that failed is
+// reported against its own name. That is not tidiness: a tellWaiting that fails
+// while tellActive succeeds produces a snapshot whose "expected a list of
+// statuses" error points at none of the six.
 pub fn (mut c Client) snapshot(waiting int, stopped int) !Snapshot {
 	results := c.multicall(snapshot_calls(waiting, stopped))!
 	if results.len < 6 {
 		return error('rpc: system.multicall returned ${results.len} of 6 results')
 	}
 	return Snapshot{
-		stat:    as_global_stat(results[0])!
-		active:  as_status_list(results[1])!
-		waiting: as_status_list(results[2])!
-		stopped: as_status_list(results[3])!
-		version: as_version(results[4])!
-		options: as_options(results[5]) or { Options{} }
+		stat:    as_global_stat(as_sub_result('aria2.getGlobalStat', results[0])!)!
+		active:  as_status_list(as_sub_result('aria2.tellActive', results[1])!)!
+		waiting: as_status_list(as_sub_result('aria2.tellWaiting', results[2])!)!
+		stopped: as_status_list(as_sub_result('aria2.tellStopped', results[3])!)!
+		version: as_version(as_sub_result('aria2.getVersion', results[4])!)!
+		options: as_options(as_sub_result('aria2.getGlobalOption', results[5])!) or { Options{} }
 	}
 }
 

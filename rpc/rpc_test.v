@@ -268,6 +268,101 @@ fn test_options_decode_as_strings_because_aria2_sends_strings() {
 
 // ---- multicall ----------------------------------------------------------
 
+// aria2's multicall result is NESTED, and the nesting differs between success and
+// failure. Verified against aria2 1.37.0 with curl:
+//
+//   success ->  [ [ {...} ], [ [] ] ]     each result inside a 1-element array
+//   failure ->  [ [ {...} ], {code:1,...} ]   the error comes back BARE
+//
+// The client's first version assumed one result per element, unwrapped nothing,
+// and decoded a correctly-answered call into "expected a global stat object".
+fn test_multicall_unwraps_the_success_wrapper() {
+	// One element, wrapped, exactly as aria2 sends it.
+	body := '{"jsonrpc":"2.0","id":"1","result":[[{"version":"1.37.0"}]]}'
+	f := new_fake([ok_envelope(body)])
+	mut c := f.client('tok')
+	got := c.multicall([call_of('aria2.getVersion', [])]) or {
+		assert false, err.msg()
+		return
+	}
+	assert got.len == 1
+	m := opt_map(got[0]) or {
+		assert false, 'the wrapper must be removed, got ${got[0].str()}'
+		return
+	}
+	assert (m['version'] or { json2.Any('') }).str() == '1.37.0'
+}
+
+fn test_a_failed_sub_call_is_an_error_that_names_the_call() {
+	// aria2 reports a per-call failure as a bare error object in that slot. If it
+	// were decoded as a result, a tellWaiting that failed would surface as
+	// "expected a list of statuses" - which names none of the six calls and
+	// points at the wrong one.
+	//
+	// All six slots are present: the length check runs first, so a short fixture
+	// would fail for the wrong reason and this test would prove nothing.
+	body := '{"jsonrpc":"2.0","id":"1","result":[' +
+		'[{"downloadSpeed":"0","numActive":"0","numWaiting":"0","numStopped":"0","numStoppedTotal":"0","uploadSpeed":"0"}],' +
+		'[[]],' +
+		'{"code":1,"message":"No such method: aria2.tellWaiting"},' +
+		'[[]],[[]],' +
+		'[{"version":"1.37.0"}],' +
+		'[{}]' +
+		']}'
+	f := new_fake([ok_envelope(body)])
+	mut c := f.client('tok')
+	c.snapshot(10, 5) or {
+		assert err.msg().contains('aria2.tellWaiting'), err.msg()
+		assert err.msg().contains('No such method'), err.msg()
+		return
+	}
+	assert false, 'a failed sub-call must not decode as a snapshot'
+}
+
+fn test_the_calls_before_a_failed_one_still_decode() {
+	// What makes the per-call error useful: the slots BEFORE the failure are fine,
+	// and a caller asking for one of them directly gets a value. (A snapshot
+	// cannot be assembled from a partial multicall - it would be a queue with a
+	// hole in it - which is why the whole thing is an error.)
+	body := '{"jsonrpc":"2.0","id":"1","result":[' +
+		'[{"downloadSpeed":"1","numActive":"0","numWaiting":"0","numStopped":"0","numStoppedTotal":"0","uploadSpeed":"0"}],' +
+		'[[]],' +
+		'{"code":1,"message":"boom"}]}'
+	f := new_fake([ok_envelope(body)])
+	mut c := f.client('tok')
+	mut calls := [call_of('aria2.getGlobalStat', []json2.Any{}),
+		call_of('aria2.tellActive', []json2.Any{})]
+	got := c.multicall(calls) or {
+		assert false, err.msg()
+		return
+	}
+	assert got.len == 3, 'every slot comes back, failed or not: ${got.len}'
+	res := as_global_stat(as_sub_result('aria2.getGlobalStat', got[0])!) or {
+		assert false, err.msg()
+		return
+	}
+	assert res.download_speed == 1
+	// And the failed slot is an error that names itself.
+	as_sub_result('aria2.tellWaiting', got[2]) or {
+		assert err.msg().contains('aria2.tellWaiting'), err.msg()
+		assert err.msg().contains('boom'), err.msg()
+		return
+	}
+	assert false, 'a bare error object must not pass as a result'
+}
+
+fn test_a_multicall_result_that_is_not_an_array_is_an_error() {
+	// Defensive, and cheap: the endpoint is on loopback where something that is
+	// not aria2 can answer.
+	f := new_fake([ok_raw('{"nope":true}')])
+	mut c := f.client('tok')
+	c.multicall([call_of('aria2.getVersion', [])]) or {
+		assert err.msg().contains('did not return an array'), err.msg()
+		return
+	}
+	assert false, 'a non-array result must be an error'
+}
+
 fn test_a_snapshot_costs_exactly_one_request() {
 	// This is the number one latency in the app: the UI heartbeat. Six
 	// separate round trips would make the window stutter on every beat.
@@ -296,9 +391,97 @@ fn test_the_multicall_batches_the_six_calls_the_ui_actually_needs() {
 	}
 	// Each sub-call carries the token too, or aria2 rejects the inner ones.
 	assert body.contains('"token:tok"')
-	// And the window/limit arguments have to be positional numbers.
-	assert body.contains('[0,10]'), 'tellWaiting limit: ${body}'
-	assert body.contains('[0,5]'), 'tellStopped limit: ${body}'
+	// NOTE: there is deliberately no `contains('[0,10]')` assertion here any more.
+	// That substring appeared only while the arguments were wrongly wrapped, and
+	// it matched inside both the broken string form and the broken nested-array
+	// form - it passed on two shapes that a real aria2 rejects. The positional
+	// arguments are checked structurally in
+	// test_the_multicall_params_are_arrays_and_not_strings below.
+}
+
+// The test that should have existed. It failed against a real aria2 and passed
+// against the fake, because the fake never validates the request shape.
+//
+// The bug: each sub-call's params were sent wrapped - first as one JSON string,
+// then as a nested array - so a real aria2 answered `1: The parameter at 0 has
+// wrong type.` for every single tick. The assertion above could not see either
+// shape, because the substring `[0,10]` occurs inside a quoted string and inside
+// a nested array alike.
+//
+// So this one decodes the recorded body and checks the SHAPE, which is the thing
+// that was actually wrong.
+fn test_the_multicall_params_are_arrays_and_not_strings() {
+	f := new_fake([ok_raw('[]')])
+	mut c := f.client('tok')
+	c.multicall(snapshot_calls(10, 5)) or { assert false, err.msg() }
+
+	// Decode the recorded request the same way aria2 will: as JSON, then by type.
+	any := json2.decode[json2.Any](f.requests[0]) or {
+		assert false, err.msg()
+		return
+	}
+	req := opt_map(any) or {
+		assert false, 'the body is not an object'
+		return
+	}
+	batch := opt_arr(req['params'] or { json2.Any('') }) or {
+		assert false, 'the outer params must be an array'
+		return
+	}
+	// The outer params are the batch and NOTHING ELSE. A token beside it is the
+	// one shape a real aria2 rejects outright ("The parameter at 0 has wrong
+	// type."), verified against aria2 1.37.0 with curl - see call_with.
+	assert batch.len == 1, 'the batch must be the ONLY outer argument, got ${batch.len}'
+	entries := opt_arr(batch[0]) or {
+		assert false, 'the batch must be an array of sub-calls, got ${batch[0].str()}'
+		return
+	}
+	assert entries.len == 6, 'got ${entries.len} sub-calls'
+	for e in entries {
+		m := opt_map(e) or {
+			assert false, 'each sub-call is an object'
+			return
+		}
+		name := (m['methodName'] or { json2.Any('') }).str()
+		// THE assertion. opt_arr, not `as []json2.Any`: in V 0.5.2 an `as` cast on
+		// a json2.Any holding something else PANICS rather than returning none,
+		// which would turn a clear test failure into a crashed test binary.
+		params := opt_arr(m['params'] or { json2.Any('') }) or {
+			assert false, '${name}: params must be an ARRAY, not ${(m['params'] or { json2.Any('') }).str()}'
+			return
+		}
+		assert params[0].str() == 'token:tok', '${name}: the token must come first, got ${params[0].str()}'
+		// Nothing may be NESTED. aria2 reads positional arguments from a flat
+		// list, so ["token:x", [0,10]] is as wrong as ["token:x", "[0,10]"].
+		for j, p in params {
+			// The token at index 0 is a string by design; everything after it must
+			// be a scalar, because aria2 reads positional arguments from a flat list.
+			if j == 0 {
+				continue
+			}
+			match p {
+				[]json2.Any {
+					assert false, '${name}: argument ${j} is a nested array: ${p.str()}'
+				}
+				string {
+					assert false, '${name}: argument ${j} is a string: ${p.str()}'
+				}
+				else {}
+			}
+		}
+	}
+	// And the positional numbers survive as numbers, not as text.
+	waiting := opt_map(entries[2]) or {
+		assert false, err.msg()
+		return
+	}
+	wp := opt_arr(waiting['params'] or { json2.Any('') }) or {
+		assert false, 'tellWaiting params must be an array'
+		return
+	}
+	assert wp.len == 3, 'token + two positional numbers, got ${wp.len}'
+	assert wp[1].str() == '0', wp[1].str()
+	assert wp[2].str() == '10', wp[2].str()
 }
 
 fn test_a_short_multicall_result_is_an_error_not_a_partial_snapshot() {

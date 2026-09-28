@@ -17,7 +17,9 @@
 			"commands": [
 				"fluxget.ping",
 				"fluxget.info",
-				"fluxget.health"
+				"fluxget.health",
+				"fluxget.tick",
+				"fluxget.add"
 			],
 			"asset_roots": ["frontend"],
 			"platforms": []

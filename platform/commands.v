@@ -3,11 +3,12 @@
 // Every handler receives raw JSON params and returns raw JSON, because a
 // bridge command runs on the webview main thread (vails ADR-0010): the work
 // here must be pure and fast. Anything slow (the aria2 RPC call, the process
-// supervisor) is reached through engine/ later, never inlined into a handler.
+// supervisor) is reached through core/, engine/ and aria2ctl/, never inlined
+// into a handler.
 //
-// Phase 0 ships the three probe commands. `fluxget.health` answers honestly
-// that the engine is not up yet, which is what lets the frontend show the
-// setup page instead of an empty list.
+// Phase 0 shipped three probe commands with no state. Phase 1 adds the two that
+// need it, and that is why this file now has a `default_backend(app)` instead
+// of a `default_backend()`: see the note on the closures below.
 module platform
 
 import json2
@@ -47,6 +48,11 @@ pub mut:
 }
 
 // Health is the wire shape of the health command.
+//
+// Phase 0 shipped five fields and the boot page still reads them, so they are
+// unchanged. aria2_path and aria2_source were added for the Setup page: it
+// cannot name a binary it was never told about, and "aria2c" on its own leaves
+// a user guessing which copy of it their downloads go through.
 pub struct Health {
 pub mut:
 	ok        bool
@@ -54,6 +60,11 @@ pub mut:
 	aria2     string
 	connected bool
 	detail    string
+	// aria2_path is the executable in use, empty when none was found.
+	aria2_path string
+	// aria2_source is which search rule found it: beside-exe, runtime, path or
+	// settings. See aria2ctl/locate.v for the order.
+	aria2_source string
 }
 
 // os_name returns a lowercase 'windows' / 'linux' / 'macos' / '<other>',
@@ -111,17 +122,13 @@ pub fn handle_info(_ string) !string {
 	return json2.encode(build_info(os.getwd(), dev_mode_from_env(), 'unknown'))
 }
 
-// handle_health reports engine health. Until aria2ctl/ lands it describes the
-// engine as disconnected with a reason instead of pretending to be ready.
-pub fn handle_health(_ string) !string {
-	return json2.encode(Health{
-		ok:        false
-		mode:      'bootstrap'
-		aria2:     ''
-		connected: false
-		detail:    'aria2 engine starts in Phase 1'
-	})
-}
+// handle_health is gone, and its absence is the point.
+//
+// Phase 0 answered it from hardcoded strings, which was honest then and is a lie
+// now: a command that reports "aria2 engine starts in Phase 1" while a real
+// engine is downloading would be worse than no command at all. fluxget.health,
+// .tick and .add are closures over App (see default_backend), because they need
+// state and a bridge handler's signature leaves nowhere to put it.
 
 // dev_mode_from_env lets the Info command report the transport even when the
 // Spec was filled in by main.v: it is the same flag main.v checks.
@@ -134,19 +141,44 @@ pub fn started_at() string {
 	return time.now().format_ss_micro()
 }
 
-// default_backend is the Phase 0 handler set: exactly the commands declared in
-// app_manifest(). services.install fails loudly if the two ever disagree,
-// which is the point of going through the service model.
+// default_backend is the handler set: exactly the commands declared in
+// app_manifest(). services.install fails loudly if the two ever disagree, which
+// is the point of going through the service model.
 //
 // Built by assignment, not a map literal. V 0.5.x cannot parse a map literal
 // whose values are functions: the bare `{ 'k': fn }` form silently yields an
 // empty map, and a typed `map[string]Handler{ 'k': fn }` literal does not
 // parse at all. The vails services/install_test.v says the same thing in a
 // comment and uses this exact shape, so the framework hit it first.
-pub fn default_backend() map[string]Handler {
+//
+// The `mut a := app` line before each closure is load-bearing, and it is the
+// same requirement rpc/fake.v documents for its recording transport: a V closure
+// gets a COPY of whatever it captures unless the capture is mutable. Without the
+// mutable local, each handler would mutate a private copy of the state and no two
+// commands would ever see the same app.
+//
+// The build prints a notice for it - "`app` is immutable, cannot have a mutable
+// reference to an immutable object" - and the notice is WRONG here. App is
+// @[heap] and is shared by pointer, so the mutation lands on the one object. That
+// is not an assumption:
+// test_two_commands_see_the_same_state in contract_test.v pushes a notice onto
+// the state the test holds, calls fluxget.tick through the router, and requires
+// the notice to come back - which it cannot if the capture copied. If that test
+// ever fails, believe the test and not the notice.
+pub fn default_backend(app &App) map[string]Handler {
 	mut backend := map[string]Handler{}
 	backend[app_name + '.ping'] = handle_ping
 	backend[app_name + '.info'] = handle_info
-	backend[app_name + '.health'] = handle_health
+
+	mut a := app
+	backend[app_name + '.health'] = fn [mut a] (_ string) !string {
+		return a.health_json()
+	}
+	backend[app_name + '.tick'] = fn [mut a] (_ string) !string {
+		return a.tick_json()
+	}
+	backend[app_name + '.add'] = fn [mut a] (params string) !string {
+		return a.add_json(params)
+	}
 	return backend
 }
