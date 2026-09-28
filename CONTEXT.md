@@ -13,7 +13,12 @@ it. Never used for the *code* that talks to it; that is `engine/`.
 `runtime/`, or is found on PATH, or is pointed at in Settings.
 
 **RPC** — aria2's JSON-RPC endpoint on loopback. Fluxget never speaks XML-RPC
-and never lets the browser extension see it (see *Control API*).
+and never lets a browser extension see it (see *Control API*).
+
+**MCP** — the Model Context Protocol: JSON-RPC 2.0 over stdio, which an assistant
+host speaks to a *MCP server*. Beware the resemblance — aria2's RPC is also
+JSON-RPC 2.0, and the two are different protocols that must never be bridged
+(`initialize`/`tools/list`/`tools/call` against `aria2.*`/`system.*`).
 
 **daemon** — the running aria2c, from the app's point of view. `aria2c` in
 *supervised* mode, never the system service.
@@ -116,19 +121,35 @@ the framework does not have `x` yet, naming the service that will replace it.
 
 ## Control API
 
-**Control API** — the loopback HTTP server the browser extension talks to
-(`127.0.0.1:8735`). The extension never speaks aria2's RPC and never holds its
-secret, so the blast radius of a compromised extension is "can ask for a
-download", not "can drive the engine".
+**Control API** — the loopback HTTP server a Control consumer talks to
+(`127.0.0.1:8735`). Today that is the browser extension; the MCP server is the
+planned second one. No consumer ever speaks aria2's RPC and none holds its
+secret, so the blast radius of a compromised consumer is "can ask for a
+download", not "can drive the engine". This is a property of the *boundary*, not
+of any one client — a new consumer inherits it or it is not a consumer.
 
-**Pairing token** — the shared secret between the app and the extension. Shown
-in the app, pasted once into the extension's options page. Loopback only.
+**Control consumer** — anything outside the app that asks Fluxget to do
+something. The extension and the MCP server. A consumer reaches the engine only
+through the Control API, so the number of consumers never becomes the number of
+ways to drive aria2.
+
+**MCP server** — the planned Phase 8 process that lets an assistant reach the
+Control API over **stdio**. A Control consumer like any other: named tools only,
+no aria2 RPC, no engine secret. It speaks MCP to its parent process and HTTP to
+Fluxget, which is why it needs no pairing token of its own.
+
+**Pairing token** — the shared secret between the app and a consumer that
+arrives over the network. Shown in the app, pasted once into the extension's
+options page. Loopback only. A stdio consumer has no socket to authenticate, so
+the token's job does not grow with the number of consumers.
 
 **Grab** — the extension's word for handing a URL, magnet or `.torrent` to the
 app. One endpoint, three payloads.
 
 **Single instance** — enforced by the Control API's port: if something already
-answers there, this process does not start. No mutex, no C.
+answers there, this process does not start. No mutex, no C. A stdio consumer
+inherits this for free, which is the other reason it is a consumer and not an
+engine owner.
 
 ## Frontend
 

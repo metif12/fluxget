@@ -172,6 +172,37 @@ the URL over), a context menu for links/media/frames, magnet links from a
 content script **plus** OS-level `magnet:` registration by the app itself, a
 live badge, and an options page for pairing.
 
+## An MCP server, planned
+
+Phase 8. An MCP server written in V, so an assistant can drive Fluxget the way
+the browser extension does. It is **a second consumer of the Control API, not a
+second way into the engine**, and that is the whole design:
+
+- **stdio, not a socket.** The assistant's host is the parent process, so there
+  is no port to reach and no second pairing secret. That is a *tighter* boundary
+  than the extension's loopback HTTP, not a looser one.
+- **It never speaks aria2's RPC and never holds the engine secret.** The same
+  argument as the extension, and it makes them one class of consumer: a
+  compromised consumer can "ask for a download", not "drive the engine". It also
+  cannot start a second aria2c, so the single-instance lock still means what it
+  says.
+- **Named tools only** — `add_download`, `list_downloads`, `pause`, `resume`,
+  `remove`, `set_speed_limit`. No generic "call any aria2 method" tool. This is
+  the one that matters most: an assistant can be *talked into* calling a tool by
+  content it read on a web page, so that list is the entire attack surface and
+  has to stay short and auditable.
+- **`mcp/` stays vails-free with an injected transport**, like `rpc.Client`, so
+  `v test` stays pure (AGENTS.md §4). An MCP server is a protocol adapter; the
+  interesting part is the boundary, and that is what gets tested.
+
+One trap worth recording now: **MCP is JSON-RPC 2.0 over stdio, and so is
+aria2's RPC.** They look alike and are not the same protocol — `initialize` /
+`tools/list` / `tools/call` against `aria2.*` / `system.*`. Nothing should ever
+bridge them.
+
+Likely shape: a `--mcp` mode on the same binary rather than a second
+executable, since it never boots a window and so never touches `platform/`.
+
 ## Roadmap
 
 | Phase | What | Gate |
@@ -185,6 +216,7 @@ live badge, and an options page for pairing.
 | **5** | Scheduler: day windows plus conditional rules | windows really change the global limit |
 | **6** | Control API + the browser extension | a Chrome download reaches Fluxget |
 | **7** | aria2 setup page, pairing QR, logs, README with screenshots | clean build from scratch |
+| **8** | MCP server in V, over the Control API | an assistant can ask Fluxget for a download |
 
 ## What Phase 1 actually established
 
@@ -221,9 +253,10 @@ rpc/              aria2 JSON-RPC client, injectable Transport
 aria2ctl/         locating, configuring and supervising aria2c
 core/             shared state, diffing, the notice queue
 engine/           the app-facing facade over aria2
+mcp/              the MCP server: stdio in, Control API out (Phase 8)
 schedule/         a pure evaluator, testable against a table of times
 store/            settings and history, atomic writes
-api/              the loopback control API for the extension
+api/              the loopback control API for the extension and the MCP server
 shell/            native fallbacks until vails ships the service
 frontend/         hand-written HTML/CSS/ES, no bundler
 extension/        MV3 for Chrome and Firefox
@@ -234,8 +267,8 @@ docs/ADR/         decisions that would be expensive to reverse
 tests/e2e_windows/  manual GUI proofs
 ```
 
-`schedule/`, `store/`, `api/`, `shell/`, `extension/` and `tools/pack/` are still
-Phase 2+ and are listed as the shape they will take.
+`schedule/`, `store/`, `api/`, `shell/`, `extension/`, `mcp/` and `tools/pack/`
+are still Phase 2+ and are listed as the shape they will take.
 
 ## Licence
 
