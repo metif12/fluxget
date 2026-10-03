@@ -471,8 +471,12 @@ fn test_the_multicall_params_are_arrays_and_not_strings() {
 		}
 	}
 	// And the positional numbers survive as numbers, not as text.
+	//
+	// `opt_map` returns an Option, not a Result, so there is NO `err` in scope
+	// here - `or { assert false, err.msg() }` does not compile. An Option has no
+	// error to report, so the message has to say what was expected instead.
 	waiting := opt_map(entries[2]) or {
-		assert false, err.msg()
+		assert false, 'the third sub-call must be an object: ${entries[2].str()}'
 		return
 	}
 	wp := opt_arr(waiting['params'] or { json2.Any('') }) or {
