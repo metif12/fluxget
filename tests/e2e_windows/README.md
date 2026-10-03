@@ -122,6 +122,49 @@ saves the session, asks aria2 to stop, waits two seconds, and only kills it if i
 has not exited. `webview.Config` has no close hook, so this runs from `main.v`
 after `platform.boot` returns.
 
+**A force-kill does not do this.** `Stop-Process -Force` leaves `aria2c` running
+and holding the RPC port, and the *next* run then reaches the stale engine with a
+new secret and every call comes back `aria2:1 Unauthorized` — which looks like an
+auth bug and is really a leak. Between manual runs:
+
+```powershell
+Stop-Process -Name fluxget,aria2c -Force -ErrorAction SilentlyContinue
+```
+
+Phase 2 lost a run to exactly this, twice.
+
+## Phase 2 - the packed document, in Persian
+
+```powershell
+.\scripts\build.ps1            # packs build\web\index.html
+$env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'   # 1 MiB, opt-in
+.\build\fluxget.exe            # NOT --dev: this is the packed path
+.\scripts\capture-window.ps1 -Out tests\e2e_windows\phase2-packed-fa-download.png
+```
+
+| Check | How | Expected | What it proves |
+|---|---|---|---|
+| packed | no `--dev`, and the transport card | `بسته‌شده` / `packed` | `set_html` got a self-contained document |
+| direction | any text | Persian, right-aligned, `dir="rtl"` | the layout is RTL-first, not translated into RTL |
+| reason | the failing row's red badge | aria2's own sentence | `errorMessage` is being read, not an invented `error` key |
+| toast | `ناموفق: <name> — <reason>` | composed in Persian | `I18n.compose_notice` is the one composer |
+
+Proof: `phase2-packed-fa-download.png`.
+
+Two of these failed first and are the reason the frame is worth having:
+
+- **The log pane did not fill its column.** A `.pane` defaults to `flex: 0 1
+  auto`, which sizes it to its content, and a log with zero lines is zero tall.
+  Only visible in the image.
+- **The engine card read `— در حال آماز`.** Forcing `direction: ltr` on every
+  card value reordered a Persian sentence around its em dash and then ellipsised
+  half a word away. Only values that really are LTR — a path, a version — may
+  opt in now, via `data-ltr`.
+
+A probe URL that no longer serves is not an app bug: the screenshot above was
+taken with a host that answers `Got EOF from the server.`, and the row still
+rendered the reason, which is the point.
+
 ### When aria2c is missing
 
 Delete or rename `runtime\aria2c.exe` and start the app. The window must still

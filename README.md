@@ -8,10 +8,12 @@ that uses the OS webview instead of bundling a browser engine.
 V 0.5.2  ·  vails 0.2.0  ·  aria2 1.37  ·  no npm, no CDN, no bundler
 ```
 
-> **Status: Phase 1 complete.** The window opens, the bridge round-trips, and
+> **Status: Phase 2 complete.** The window opens, the bridge round-trips, and
 > **a real download runs**: Fluxget finds aria2c, spawns it, speaks JSON-RPC to
-> it, and shows the queue live. Phases 2-8 are [re-planned](#roadmap) around
-> competitive parity with Surge.
+> it, and shows the queue live. The UI is now RTL-first Persian with an English
+> switch, two themes, keyboard navigation and a live speed chart, and the
+> production build ships as **one packed document**. Phases 3-8 are
+> [re-planned](#roadmap) around competitive parity with Surge.
 
 ![Phase 1: a real 1 MiB download, complete, with the Finished notice](tests/e2e_windows/phase1-download.png)
 
@@ -26,6 +28,25 @@ working now that the handlers hold state.
 The second proof needs no network at all: [the session round-trip](tests/e2e_windows/phase1-session-resume.png)
 shows a queue that arrived from a hand-written `--input-file`, with the `out=`
 option honoured.
+
+### Phase 2: the packed build, in Persian, with a reason
+
+![Phase 2: the packed document, RTL Persian, a real failure with aria2's own reason](tests/e2e_windows/phase2-packed-fa-download.png)
+
+This is the **release** binary, not `--dev`: all three stylesheets and all three
+scripts inlined into a single `build/web/index.html` by `tools/pack`, because
+`set_html` gives the document no origin and a relative `<script src>` cannot load.
+The empty window you would get otherwise is the least explicable failure a
+desktop app has.
+
+Two things in that frame are the phase's actual content. `ناموفق: downloads — Got
+EOF from the server.` is a **Notice** composed from structured facts — kind, name,
+and aria2's own error — by the one composer in `frontend/js/i18n.js`, not an
+English sentence the UI could not translate. And **"Got EOF from the server." is
+there at all** because `rpc/rpc.v` was reading a JSON key that aria2 has never
+sent: `rpc/fake.v`'s fixture also said `error`, so a green suite agreed with a
+decoder that was wrong. Fixed against a captured `aria2c 1.37.0` response; see
+[AGENTS.md](AGENTS.md#and-since-phase-1).
 
 ---
 
@@ -220,7 +241,7 @@ competitive value, not by what happened to be built first.
 | **0** ✅ | Repo, submodule, scripts, window, bridge | window opens, gate green |
 | **0.5** ✅ | The seam, the contract, `vails.lock`, compat reports | 13 contract tests green |
 | **1** ✅ | `aria2ctl/` + `core/` + `engine/`, real download in the UI | a real download visible in the window |
-| **2** | **Product feel** — design system, i18n with `fa` RTL, light + dark, keyboard shortcuts, speed charts, `tools/pack` | switch language and theme live; a chart redraws every tick; the packed document runs |
+| **2** ✅ | **Product feel** — design system, i18n with `fa` RTL, light + dark, keyboard shortcuts, speed charts, `tools/pack` | switch language and theme live; a chart redraws every tick; the packed document runs |
 | **3** | **Control + settings** — pause/resume/remove/retry/move, global and per-item limits, `store/` | every row operable; limits and settings survive a restart |
 | **4** | **Speed + mirrors** — adaptive connections, mirror sets with liveness probing, force-sequential streaming, checksums, `fluxget bench` | `bench` publishes numbers against aria2c/curl **including where we lose**; a dead mirror is dropped and the set continues |
 | **5** | **Torrents** — magnet and `.torrent`, peers, trackers, file selection, seed policy | a magnet and a `.torrent` both finish |

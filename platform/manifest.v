@@ -122,6 +122,8 @@ fn app_ts_types() []string {
 		'\texport interface Notice {',
 		'\t\tkind: string;',
 		'\t\tgid: string;',
+		'\t\tname: string;',
+		'\t\terror: string;',
 		'\t\ttext: string;',
 		'\t\tat_ms: number;',
 		'\t}',

@@ -1,0 +1,305 @@
+/* app.css — the Phase 2 component layer.
+   Phase 0's base.css was a reset and a boot screen; this is the part that makes
+   a window look like a product: tokens for both themes, focus that is visible,
+   the chart, dialogs, and the RTL pass.
+
+   Three rules this file follows, and they are the ones that separate a design
+   system from a pile of styles:
+
+   1. NO RAW COLOURS BELOW. Everything reads a custom property. A hex in a rule is
+      a pixel that will not follow the theme switch, and there are two of those per
+      component that matters.
+
+   2. LOGICAL PROPERTIES ONLY for anything that has a direction: margin-inline,
+      padding-block, inset-inline, border-inline-start. `left`/`right` would need
+      a mirrored copy for fa, and the copy would rot.
+
+   3. SPACING IS THE SCALE. --sp-1 through --sp-8, nothing else. A component
+      with 13px and 14px padding is not a design system, it is a coincidence. */
+
+/* ---- theme tokens ------------------------------------------------------- */
+
+:root {
+	/* Chart series. Declared here rather than in tokens.css because they belong to
+	   one component - but they are still tokens, because canvas reads them through
+	   getComputedStyle at draw time and a hex written in chart.js would be a colour
+	   that survives a theme switch and stays dark on a light page. */
+	--chart-down: #4cc2ff;
+	--chart-up:   #43d18b;
+	--chart-grid: #232830;
+
+	--focus:      #4cc2ff;
+	/* A light page needs a softer shadow or every card looks like a sticker. */
+	--shadow:    0 8px 24px rgba(0, 0, 0, .38);
+	--shadow-sm: 0 2px 8px rgba(0, 0, 0, .28);
+}
+
+[data-theme="light"] {
+	--chart-down: #0a6fb5;
+	--chart-up:   #1f8a54;
+	--chart-grid: #e0e4ea;
+	--focus:      #0a6fb5;
+	--shadow:    0 8px 24px rgba(20, 23, 28, .12);
+	--shadow-sm: 0 2px 8px rgba(20, 23, 28, .10);
+}
+
+/* ---- focus -------------------------------------------------------------- */
+
+/* Never remove the outline without replacing it: a window that can be driven by
+   keyboard has to show where the keyboard is. `:focus-visible` rather than
+   `:focus` so a mouse click does not leave a ring behind on every row. */
+:focus { outline: none; }
+
+:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: var(--r1);
+}
+
+.row:focus-visible {
+	outline-offset: -1px;
+}
+
+/* ---- topbar actions ----------------------------------------------------- */
+
+.tools {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	flex: 0 0 auto;
+}
+
+.tool {
+	/* A button that reads as a label, not a control: it toggles document state,
+	   so a borderless chip with a hover wash is the right weight. */
+	padding: var(--sp-1) var(--sp-3);
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: var(--r2);
+	color: var(--text-dim);
+	font-family: var(--font);
+	font-size: 12px;
+	cursor: pointer;
+	transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+
+.tool:hover { background: var(--surface-hi); color: var(--text); }
+
+/* ---- panes and the chart ------------------------------------------------ */
+
+/* The right-hand column, so the queue pane stays a single grid cell while the
+   chart and the log stack inside their own. Without this the two would be three
+   siblings and the layout would depend on how many panes happened to exist. */
+.pane-column {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-4);
+	min-width: 0;
+	min-height: 0;
+}
+
+/* The chart is a fixed height - it is a picture, not a list - so it takes what
+   it needs and no more. The log below it takes the rest, which is why the flex
+   value is here rather than on .pane: a .pane defaults to flex 0 1 auto, which
+   sizes it to its CONTENT, and a log with zero lines in it is zero tall. The
+   symptom of getting this wrong is a column with a chart at the top, a stub of a
+   log under it, and a third of the window empty. */
+.pane--chart { flex: 0 0 auto; }
+.pane--log   { flex: 1 1 auto; }
+
+.chart {
+	display: block;
+	width: 100%;
+	height: 110px;
+	/* The drawing direction is fixed LTR even in an RTL document: a time series
+	   that runs right-to-left reads as "the future is on the left". This is the
+	   one place the page overrides the document's direction, and the reason is
+	   written in js/chart.js too. */
+	direction: ltr;
+}
+
+.legend {
+	display: flex;
+	gap: var(--sp-4);
+	padding: var(--sp-2) var(--sp-4) var(--sp-3);
+	font-family: var(--mono);
+	font-size: 11px;
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
+}
+
+.legend__key {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+.legend__swatch {
+	width: 10px;
+	height: 2px;
+	border-radius: 1px;
+}
+
+.legend__swatch--down { background: var(--chart-down); }
+.legend__swatch--up   { background: var(--chart-up); }
+
+.legend__value { color: var(--text); }
+
+/* ---- selected row -------------------------------------------------------- */
+
+/* Selection is a background AND an inset ring: the background alone disappears
+   against a selected dark row, and the ring alone reads as a focus indicator
+   rather than a selection. */
+.row.is-selected {
+	background: var(--surface-hi);
+	box-shadow: inset 0 0 0 1px var(--focus);
+}
+
+/* ---- setup --------------------------------------------------------------- */
+
+.setup__cmd {
+	/* In an RTL paragraph a code span still has to read left to right, or the
+	   backslashes in a Windows path come out mirrored. */
+	direction: ltr;
+	unicode-bidi: embed;
+	text-align: start;
+}
+
+/* ---- shortcuts dialog ---------------------------------------------------- */
+
+.dialog {
+	position: fixed;
+	inset: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, .55);
+	z-index: 20;
+}
+
+.dialog[hidden] { display: none; }
+
+.dialog__panel {
+	background: var(--surface);
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r3);
+	box-shadow: var(--shadow);
+	padding: var(--sp-6);
+	min-width: min(420px, 92vw);
+	max-width: 92vw;
+}
+
+.dialog__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: var(--sp-6);
+	margin-block-end: var(--sp-4);
+}
+
+.dialog__title {
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+}
+
+.dialog__close {
+	background: none;
+	border: none;
+	color: var(--text-faint);
+	font-family: var(--font);
+	font-size: 12px;
+	cursor: pointer;
+	padding: 0;
+}
+
+.dialog__close:hover { color: var(--text); }
+
+/* white-space: pre so the alignment of the two columns survives, and `direction:
+   ltr` because a key list is read left to right even in an RTL dialog. */
+.dialog__body {
+	margin: 0;
+	font-family: var(--mono);
+	font-size: 12px;
+	line-height: 1.9;
+	color: var(--text-dim);
+	white-space: pre;
+	direction: ltr;
+	text-align: start;
+}
+
+/* ---- toasts, RTL-aware ---------------------------------------------------- */
+
+.toast {
+	max-width: 420px;
+	/* The text follows the document direction, but a filename inside it must
+	   not: a mixed Persian sentence containing "100Mb.dat" is only legible if
+	   the name keeps its own direction. */
+	overflow-wrap: anywhere;
+}
+
+/* ---- RTL adjustments ----------------------------------------------------- */
+
+/* Logical properties do most of it. What is left is the handful of places where
+   the *meaning* of a side flips rather than the geometry. */
+
+/* The progress bar fills from the inline-start edge, which in fa is the right -
+   correct, because a progress bar that grows leftwards in an RTL layout reads as
+   the download going backwards. */
+.row__bar { margin-inline-start: 0; }
+
+/* Badges carry their own direction for the same reason as a filename: "BT" and
+   a tracker error must not be reordered by the surrounding sentence. */
+.badge {
+	direction: ltr;
+	unicode-bidi: isolate;
+}
+
+/* The status word is aria2's own vocabulary, unchanged and untranslated, so it
+   stays LTR even though its neighbours are Persian. */
+.row__state {
+	direction: ltr;
+	unicode-bidi: isolate;
+}
+
+/* Byte counts and rates are formatted by the native side and are numbers: LTR. */
+.row__done,
+.row__pct,
+.row__speed,
+.row__eta {
+	direction: ltr;
+	unicode-bidi: isolate;
+	text-align: start;
+}
+
+/* A card value is NOT automatically LTR, and forcing it is a bug I shipped and
+   then had to look at: the engine card holds a localized sentence ("در حال
+   آمازسازی — restarting"), and inside an LTR isolate the Persian run is reordered
+   around the em dash and then ellipsised away, so the card read "— در حال آماز".
+   Half a Persian word is worse than no status at all.
+   So a card value follows the document, and only the cards that hold a genuinely
+   LTR value - a filesystem path, a version - opt in with data-ltr. */
+.card__v[data-ltr] {
+	direction: ltr;
+	unicode-bidi: isolate;
+	text-align: start;
+}
+
+/* ---- narrow windows ------------------------------------------------------ */
+
+/* At the width a 1360x880 window actually is there is room for everything; this
+   is for a user who has the window narrow, where three panes stop working. */
+@media (max-width: 980px) {
+	.panes {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+	}
+
+	.pane--log { max-height: 200px; }
+	.addbar { max-width: none; }
+}
+
+@media (max-width: 720px) {
+	.cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+	.topbar { flex-wrap: wrap; }
+}

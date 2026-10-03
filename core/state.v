@@ -346,10 +346,11 @@ pub fn (mut s State) seed_probe() {
 		})
 		return
 	}
-	s.notices.push(Notice{
-		kind: notice_added
-		text: 'probe: added ' + s.conf.probe_url
-	})
+	// No "added" notice here on purpose. core/notice.v's diff announces every gid
+	// it has not seen before, and a download added through the engine is exactly
+	// that - so pushing one as well toasted "Added" twice for a single download.
+	// That is the rule this project keeps: one event, one source, one sentence.
+	// The engine log line aria2 prints on start is the probe's own trace.
 }
 
 // exe_dir is the directory holding this binary, which is rule 1 of the aria2c

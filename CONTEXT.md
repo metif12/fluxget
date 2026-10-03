@@ -71,7 +71,12 @@ heartbeat, and the only way the window learns anything changed.
 
 **Notice** — a queued event (finished, failed, schedule applied). Delivered in
 the *next* snapshot rather than pushed, because a handler may not emit from a
-worker thread. `core/` owns the queue.
+worker thread. `core/` owns the queue. A Notice carries the **facts** of an event
+— kind, gid, the download's name, aria2's error — *and* an English sentence in
+`text`. The frontend's locale layer composes its own sentence from the facts; the
+Logs tab, the CLI and the MCP server have no locale and use `text`. There is one
+English composer and one localised one, both driven by `kind`: what must never
+happen is two components each inventing wording for one event.
 
 **Limit** — a speed cap. **Global** applies to everything (`max-overall-*`),
 **item** to one Download, and a **schedule** rewrites the global one on a

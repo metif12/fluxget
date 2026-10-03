@@ -38,6 +38,19 @@ body {
 
 .topbar__mark { color: var(--accent); display: flex; }
 
+.topbar__brand {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+	flex: 0 0 auto;
+}
+
+.topbar__tagline {
+	font-size: 10px;
+	color: var(--text-faint);
+	white-space: nowrap;
+}
+
 .topbar__title {
 	font-size: 17px;
 	font-weight: 600;

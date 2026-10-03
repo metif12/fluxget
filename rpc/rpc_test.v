@@ -128,6 +128,45 @@ fn test_status_decodes_the_fields_the_ui_binds_to() {
 	assert s.dir == '/downloads'
 }
 
+fn test_a_real_aria2_failure_payload_decodes_to_the_reason() {
+	// This is the test that could not have failed before, and that is the point.
+	//
+	// The decoder read the JSON key `error`, and the fake's fixture also said
+	// `error`, so the suite proved that a failure's reason arrived intact. Real
+	// aria2 has never sent a key called `error`. It sends `errorCode` and
+	// `errorMessage`; the fixture was written from memory and encoded the wish.
+	// The consequence was invisible in the tests and obvious in the app: every
+	// failed download toasted "no reason given".
+	//
+	// The payload below is copied from aria2 1.37.0 on this machine, so the
+	// assertion is about a key set that really exists - and, just as important,
+	// there is no `error` key in it for a decoder to fall back on.
+	payload := '{"gid":"910f7f5c4e3ad7a4","status":"error","totalLength":"0","completedLength":"0","uploadLength":"0","downloadSpeed":"0","connections":"0","errorCode":"1","errorMessage":"gopher is not supported yet.","dir":"/downloads","numPieces":"0","pieceLength":"1048576"}'
+	// The key form, with the colon. Searching for a bare `"error"` matches
+	// `"status":"error"` - which is a VALUE - and so would pass or fail for
+	// reasons that have nothing to do with the bug this test is about.
+	assert !payload.contains('"error":'), 'the payload must not invent an error key'
+
+	f := new_fake([ok_raw(payload)])
+	mut c := f.client('s')
+	s := c.tell_status('910f7f5c4e3ad7a4', []) or { assert false, err.msg() }
+	assert s.error == 'gopher is not supported yet.', 'reason lost: ${s.error}'
+	assert s.error_code == '1', 'code lost: ${s.error_code}'
+	assert s.status == 'error'
+}
+
+// The shipped fixture has to keep saying the same thing, or the contract test
+// above and the fake have drifted apart - which is how the original bug lived
+// for a whole phase.
+fn test_the_error_fixture_matches_the_real_payload() {
+	f := new_fake([ok_raw(fixture_status_error)])
+	mut c := f.client('s')
+	s := c.tell_status('910f7f5c4e3ad7a4', []) or { assert false, err.msg() }
+	assert s.error == 'gopher is not supported yet.', s.error
+	assert s.error_code == '1', s.error_code
+	assert !fixture_status_error.contains('"error":'), 'the fixture invented an error key'
+}
+
 fn test_status_derivations_are_safe_at_the_edges() {
 	// Zero and unknown sizes are normal, and a NaN or a negative ETA would
 	// render as garbage in the row.
@@ -519,8 +558,11 @@ fn test_snapshot_all_orders_active_then_queued_then_finished() {
 	assert all[0].status == 'active'
 	assert all[1].status == 'complete'
 	assert all[2].status == 'error'
-	assert all[2].error == 'Connection failed', 'the error message must survive: ${all[2].error}'
-	assert all[2].error_code == '3'
+	// The message and the code both survive the batch, and the batch is where a
+	// field used to get lost: a multicall wraps every result, so a key read from the
+	// wrong level is empty rather than wrong. Real values from aria2 1.37.0.
+	assert all[2].error == 'gopher is not supported yet.', 'the error message must survive: ${all[2].error}'
+	assert all[2].error_code == '1', all[2].error_code
 }
 
 // ---- adding downloads ---------------------------------------------------

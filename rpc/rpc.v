@@ -326,7 +326,23 @@ fn as_status(a json2.Any) !Status {
 		seeder:                   bool_of(m, 'seeder')
 		info_hash:                str_of(m, 'infoHash')
 		dir:                      str_of(m, 'dir')
-		error:                    str_of(m, 'error')
+		// aria2 spells it `errorMessage`, and there is no `error` key in
+		// tellStatus at all. Verified against aria2 1.37.0 on this machine: a
+		// download that failed with an unsupported protocol returned
+		// `errorCode: "1"` and `errorMessage: "gopher is not supported yet."` and
+		// no `error`.
+		//
+		// Reading 'error' here is a bug that a green test suite could not catch,
+		// because rpc/fake.v's fixture also said "error" - a field aria2 has never
+		// sent. Every failure in the UI said "no reason given" while the tests
+		// said the reason was carried. The lesson is AGENTS.md's own: a fake
+		// transport teaches you the wire format YOU imagined.
+		//
+		// The V field stays `error` because a field name cannot contain an
+		// uppercase letter (a hard error) and a `[json: ]` attribute is
+		// miscompiled in 0.5.2, so aria2's camelCase key has to be read by hand
+		// out of the decoded map rather than matched by the decoder.
+		error:                    str_of(m, 'errorMessage')
 		error_code:               str_of(m, 'errorCode')
 		followed_by:              str_of(m, 'followedBy')
 		following_gid:            str_of(m, 'followingGid')

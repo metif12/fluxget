@@ -4,6 +4,9 @@
 *.exe
 .vmodules/
 .v/
+# V's per-project build cache, created by running the compiler from the repo
+# root. Regenerated; never source.
+.cache/
 *.tmp
 
 # Build staging: the exe, the five webview DLLs and the packed frontend.

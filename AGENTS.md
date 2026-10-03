@@ -280,6 +280,32 @@ script. It measures what is on disk, or takes a URL the operator supplies.
   detail is load-bearing, check it against the real thing with `curl` and pin
   what you find in the fixture — that is how aria2's nested multicall results and
   its "no token on the outer call" rule were established.
+- **…and a fixture written from memory is the same bug wearing a disguise.**
+  `rpc/fake.v`'s error fixture carried `"error":"Connection failed"`. Real aria2
+  has never sent a key called `error`; it sends `errorCode` and
+  `errorMessage`. Because the fake agreed with the decoder, the whole suite
+  proved a failure's reason arrived intact while the app toasted "no reason
+  given" for every failure — found only by running the built binary and looking.
+  Fixtures are now copied from captured `aria2c 1.37.0` responses, and
+  `test_a_real_aria2_failure_payload_decodes_to_the_reason` asserts the real key
+  set. **Capture it; do not remember it.**
+- **aria2's JSON keys are camelCase and V field names cannot be.** An uppercase
+  letter in a field name is a hard error and `[json: 'name']` is miscompiled in
+  0.5.2, so every aria2 key is read by hand out of the decoded map in
+  `rpc/rpc.v::as_status` (`totalLength`, `errorCode`, `errorMessage`,
+  `infoHash`, `pieceLength`, `followedBy`). Fluxget's *own* wire format is
+  snake_case (section 5) — the two directions are different and it is easy to
+  apply the wrong one.
+- **A force-killed `fluxget` leaves `aria2c` running.** The engine is reaped on
+  a normal close (`main.v` shuts it down after `platform.boot` returns), but
+  `Stop-Process -Force` orphans it, and the orphan keeps the default RPC port.
+  The *next* run then connects to the stale engine with a different secret and
+  every call comes back `aria2:1 Unauthorized` — which reads like an auth bug and
+  is really a leak. `Get-Process aria2c | Stop-Process -Force` between manual
+  runs.
 - **A screenshot must be checked.** `scripts/capture-window.ps1` refuses to write
   a blank frame, because a capture that silently failed looks exactly like a
-  successful one.
+  successful one. It cannot, however, tell you the page is *right* — two of the
+  bugs this phase (a log pane that did not fill its column, and Persian prose
+  reordered inside an LTR-isolated card) were only visible by looking at the
+  image.

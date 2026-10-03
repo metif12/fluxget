@@ -208,6 +208,44 @@ fn test_the_default_notice_limit_is_the_documented_one() {
 	assert NoticeQueue{}.limit == max_notices
 }
 
+// A notice carries the FACTS as well as the English sentence, because a Persian
+// or Chinese UI cannot use a pre-composed English string and a Logs tab with no
+// locale cannot compose one. Both are shipped.
+fn test_a_notice_carries_both_the_facts_and_an_english_sentence() {
+	// This is what the frontend's i18n layer composes from. `name` is the subject
+	// and `error` is aria2's own wording, which is NOT translated: a server's error
+	// text is more useful verbatim than a generic translation of it.
+	ns := run([st('aa01', 'active')], [st_err('aa01', 'Connection refused')])
+	assert kinds(ns) == [notice_failed], '${kinds(ns)}'
+	assert ns[0].name != '', 'a localised toast needs a subject: ${ns[0]}'
+	assert ns[0].name == ns[0].gid || ns[0].name.contains('aa01'), ns[0].name
+	assert ns[0].error == 'Connection refused', ns[0].error
+	// And the English sentence is still whole, for the Logs tab / CLI / MCP server.
+	assert ns[0].text.contains('Connection refused'), ns[0].text
+	assert ns[0].text.starts_with('Failed'), ns[0].text
+}
+
+fn test_a_successful_notice_has_no_error_to_translate() {
+	ns := run([st('aa01', 'active')], [st('aa01', 'complete')])
+	assert kinds(ns) == [notice_finished]
+	assert ns[0].error == '', 'a finish has no error, and an empty one must not be invented'
+	assert ns[0].text.contains('Finished'), ns[0].text
+}
+
+fn test_an_engine_notice_carries_text_and_no_download() {
+	// Notices about the engine itself have no gid and no name, which is why
+	// `text` cannot be optional: it is all such a notice has.
+	mut q := NoticeQueue{}
+	q.push(Notice{
+		kind: notice_info
+		text: 'aria2c was not found. Run .\\scripts\\fetch-aria2.ps1, or set a path in Settings.'
+	})
+	got := q.drain()
+	assert got.len == 1
+	assert got[0].gid == '' && got[0].name == ''
+	assert got[0].text.contains('fetch-aria2.ps1')
+}
+
 fn test_the_notice_kind_words_are_the_ones_the_frontend_switches_on() {
 	// These cross the bridge. A rename is a wire change.
 	assert notice_added == 'added'

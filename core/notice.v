@@ -27,14 +27,26 @@ pub const notice_info = 'info'
 // Notice is one queued event.
 pub struct Notice {
 pub mut:
-	// kind is one of the notice_* constants.
+	// kind is one of the notice_* constants. This plus the fields below are the
+	// FACTS of the event, and they are all a localised frontend needs to build a
+	// sentence in the user's language.
 	kind string
 	// gid is the download it concerns. Empty for a notice about the engine
 	// itself, which is why it is not the key.
 	gid string
-	// text is the human sentence. The frontend shows it verbatim; nothing
-	// rephrases a Notice, because two components inventing their own wording for
-	// the same event is how a log becomes unreadable.
+	// name is the download's display name as of this tick, so the frontend does
+	// not have to keep a name table to label a toast.
+	name string
+	// error is aria2's own failure message, verbatim and untranslated. A server's
+	// error text is not ours to translate, and a generic Persian string would be
+	// LESS useful than the original.
+	error string
+	// text is the whole sentence, in English, composed by describe below.
+	//
+	// It is the fallback rather than the primary: the Logs tab, the CLI and the
+	// MCP server all have no locale and need one, and a farsi-only Notice would
+	// leave those three surfaces unable to say anything. So both are shipped and
+	// the frontend's i18n layer composes from the fields above when it can.
 	text string
 	// at_ms is when the transition was observed.
 	at_ms i64
@@ -132,6 +144,8 @@ fn transition(before Seen, s rpc.Status, now_ms i64) ?Notice {
 		return Notice{
 			kind:  kind
 			gid:   s.gid
+			name:  s.display_name('')
+			error: s.error
 			text:  describe(kind, s)
 			at_ms: now_ms
 		}
@@ -152,6 +166,8 @@ fn transition(before Seen, s rpc.Status, now_ms i64) ?Notice {
 		return Notice{
 			kind:  kind
 			gid:   s.gid
+			name:  s.display_name('')
+			error: s.error
 			text:  describe(kind, s)
 			at_ms: now_ms
 		}
@@ -159,9 +175,14 @@ fn transition(before Seen, s rpc.Status, now_ms i64) ?Notice {
 	return none
 }
 
-// describe is the one place a Notice's sentence is written. Every component
-// shows this text rather than composing its own, so the same event reads the
-// same in the toast, the log and the history.
+// describe is the ENGLISH sentence for a Notice, composed in exactly one place.
+//
+// It is not the only composer any more - frontend/js/i18n.js composes from the
+// same structured fields in the user's language - so the rule that mattered is
+// restated as it now actually holds: there is ONE English composer and ONE
+// localised one, both driven by `kind`, neither inventing wording. Two
+// components each free-handing a sentence for the same event is how a log
+// becomes unreadable, and that is still the thing to avoid.
 fn describe(kind string, s rpc.Status) string {
 	name := s.display_name('')
 	match kind {

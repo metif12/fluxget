@@ -1,25 +1,28 @@
 <!doctype html>
-<html lang="en" dir="ltr" data-theme="dark">
+<html lang="fa" dir="rtl" data-theme="dark">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Fluxget</title>
 <link rel="stylesheet" href="css/tokens.css" />
 <link rel="stylesheet" href="css/base.css" />
+<link rel="stylesheet" href="css/app.css" />
 </head>
 <body>
 <!--
-  Phase 1. Still one page, still no bundler, still no design system - Phase 2
-  owns that. What changed is that every number on it is real:
+  Phase 2. Still no framework and no bundler: the CSP is
+  `script-src 'self' 'unsafe-inline'`, hand-written ES5 is deliberate, and
+  tools/pack inlines all three stylesheets and all three scripts into one file for
+  production.
 
-    * the status row is fed by fluxget.tick, the app's heartbeat;
-    * the queue is the live download list from that tick;
-    * the Add box hands a URL, a magnet or a .torrent to fluxget.add;
-    * the log is aria2's own stderr, drained by the tick.
+  RTL-FIRST, not translated-into-RTL. The document starts lang="fa" dir="rtl"
+  because that is the layout the CSS was written against - logical properties,
+  margin-inline, inset-block - so fa is the design and en is the override. Doing
+  it the other way round is how a localised UI ends up with a mirrored layout
+  bolted onto an LTR one, with the spacing subtly wrong in one language.
 
-  There is no push from the native side. vails ADR-0010 forbids V->JS eval from
-  a worker, so the page polls - see js/boot.js. The interval is 1s, which is
-  fast enough to look live and slow enough that a tick is one loopback multicall.
+  Every user-visible string carries data-i18n, so switching locale is a DOM walk
+  rather than a reload. Nothing here has text baked in.
 -->
 <div class="app" id="app">
 
@@ -29,44 +32,57 @@
 				<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
 			</svg>
 		</div>
-		<div class="topbar__title">Fluxget</div>
+		<div class="topbar__brand">
+			<div class="topbar__title">Fluxget</div>
+			<div class="topbar__tagline" data-i18n="app.tagline"></div>
+		</div>
 
 		<form class="addbar" id="addform" autocomplete="off">
 			<input class="addbar__input" id="addurl" type="text" spellcheck="false"
-				placeholder="https://  ·  magnet:?xt=urn:btih:…  ·  C:\path\to\file.torrent"
-				aria-label="URL, magnet link or path to a .torrent to download" />
-			<button class="addbar__btn" id="addbtn" type="submit">Add</button>
+				dir="ltr"
+				data-i18n-attr="placeholder:add.placeholder"
+				data-i18n-attr="aria-label:add.aria" />
+			<button class="addbar__btn" id="addbtn" type="submit" data-i18n="add.button">Add</button>
 		</form>
+
+		<div class="tools">
+			<button class="tool" id="localebtn" type="button" title="l">فارسی</button>
+			<button class="tool" id="themebtn" type="button" title="t">◐</button>
+			<button class="tool" id="helpbtn" type="button" data-i18n-attr="aria-label:shortcuts.title">?</button>
+		</div>
 	</header>
 
 	<!--
 	  The status row. `data-state` drives the colour, and it is the same three
-	  words base.css already used for the Phase 0 cards, so nothing new had to be
-	  invented for "this is broken".
+	  words base.css used from Phase 0, so nothing new had to be invented for
+	  "this is broken".
 	-->
 	<section class="cards" id="cards">
-		<article class="card" data-key="engine">
-			<h2 class="card__k">engine</h2>
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.engine">engine</h2>
 			<p class="card__v" id="v-engine">…</p>
 		</article>
-		<article class="card" data-key="speed">
-			<h2 class="card__k">speed</h2>
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.speed">speed</h2>
 			<p class="card__v" id="v-speed">…</p>
 		</article>
-		<article class="card" data-key="queue">
-			<h2 class="card__k">queue</h2>
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.queue">queue</h2>
 			<p class="card__v" id="v-queue">…</p>
 		</article>
-		<article class="card" data-key="aria2">
-			<h2 class="card__k">aria2c</h2>
-			<p class="card__v" id="v-aria2">…</p>
+		<!-- data-ltr: this card holds a filesystem path, which is always LTR even
+		     inside a Persian sentence. The engine card above deliberately has no
+		     such attribute, because it holds prose. -->
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.aria2">aria2c</h2>
+			<p class="card__v" id="v-aria2" data-ltr>…</p>
 		</article>
-		<article class="card" data-key="transport">
-			<h2 class="card__k">transport</h2>
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.transport">transport</h2>
 			<p class="card__v" id="v-transport">…</p>
 		</article>
-		<article class="card" data-key="bridge">
-			<h2 class="card__k">bridge</h2>
+		<article class="card">
+			<h2 class="card__k" data-i18n="card.bridge">bridge</h2>
 			<p class="card__v" id="v-bridge">…</p>
 		</article>
 	</section>
@@ -78,45 +94,83 @@
 	  should see the queue appear without a reload.
 	-->
 	<section class="setup" id="setup" hidden>
-		<h2 class="setup__title">aria2c is not installed</h2>
+		<h2 class="setup__title" data-i18n="setup.title">aria2c is not installed</h2>
 		<p class="setup__body" id="setup-detail"></p>
 		<pre class="setup__cmd">.\scripts\fetch-aria2.ps1</pre>
-		<p class="setup__note">
-			Then restart Fluxget. It picks the binary up from <code>runtime\</code> automatically.
-		</p>
+		<p class="setup__note" data-i18n="setup.note"></p>
 	</section>
 
 	<main class="panes">
 		<section class="pane pane--queue">
 			<div class="pane__head">
-				<h2 class="pane__title">downloads</h2>
+				<h2 class="pane__title" data-i18n="pane.downloads">downloads</h2>
 				<span class="pane__count" id="queue-count">0</span>
 			</div>
 			<!--
-			  The empty message is a SIBLING of #rows, not a child of it. renderRows
-			  clears #rows wholesale to rebuild it, so anything living in there is
-			  destroyed on the first re-render - and the next call then throws on a
-			  null reference, which is a miserable bug to chase from a symptom in the
-			  status row.
+			  The empty message is a SIBLING of #rows, not a child of it.
+			  renderRows clears #rows wholesale to rebuild it, so anything living
+			  in there is destroyed on the first re-render - and the next call
+			  then throws on a null reference, which is a miserable bug to chase
+			  from a symptom in the status row.
 			-->
-			<p class="empty" id="empty">Nothing queued. Add a URL above.</p>
-			<div class="rows" id="rows"></div>
+			<p class="empty" id="empty" data-i18n="empty.queue"></p>
+			<div class="rows" id="rows" role="list"></div>
 		</section>
 
-		<aside class="pane pane--log">
-			<div class="pane__head">
-				<h2 class="pane__title">engine log</h2>
-				<span class="pane__count" id="log-count">0</span>
-			</div>
-			<!-- aria2's stderr, newest first. The ring buffer on the native side
-			     keeps the last 200 lines, so this is scrollback and not a file. -->
-			<pre class="log" id="log"></pre>
-		</aside>
+		<div class="pane-column">
+			<section class="pane pane--chart">
+				<div class="pane__head">
+					<h2 class="pane__title" data-i18n="pane.speed">speed</h2>
+				</div>
+				<canvas class="chart" id="chart" aria-hidden="true"></canvas>
+				<div class="legend">
+					<span class="legend__key">
+						<span class="legend__swatch legend__swatch--down"></span>
+						<span class="legend__value" id="legend-down">0 B/s</span>
+					</span>
+					<span class="legend__key">
+						<span class="legend__swatch legend__swatch--up"></span>
+						<span class="legend__value" id="legend-up">0 B/s</span>
+					</span>
+				</div>
+			</section>
+
+			<section class="pane pane--log">
+				<div class="pane__head">
+					<h2 class="pane__title" data-i18n="pane.log">engine log</h2>
+					<span class="pane__count" id="log-count">0</span>
+				</div>
+				<!-- aria2's stderr, newest first. The ring buffer on the native
+				     side keeps the last 200 lines, so this is scrollback and not
+				     a file. -->
+				<pre class="log" id="log" dir="ltr"></pre>
+			</section>
+		</div>
 	</main>
 
 	<div class="toasts" id="toasts" aria-live="polite"></div>
+
+	<!-- Shortcuts. A <dialog> would be nicer and WebView2 has it, but the
+	     element's own key handling differs enough between versions that a
+	     plain div plus an Escape handler is one less thing to be surprised by. -->
+	<div class="dialog" id="help" hidden role="dialog" aria-modal="true">
+		<div class="dialog__panel">
+			<div class="dialog__head">
+				<h2 class="dialog__title" data-i18n="shortcuts.title"></h2>
+				<button class="dialog__close" id="helpclose" type="button" data-i18n="shortcuts.close"></button>
+			</div>
+			<pre class="dialog__body" id="helpbody"></pre>
+		</div>
+	</div>
 </div>
 
+<!--
+  Load order is a dependency order, not a convenience: i18n.js owns the locale and
+  the theme and has to be live before anything renders, chart.js only needs the
+  DOM, and boot.js is the only thing that calls into the others.
+-->
+<script src="js/i18n.js"></script>
+<script src="js/chart.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

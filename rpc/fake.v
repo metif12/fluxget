@@ -155,14 +155,27 @@ pub fn (f &Fake) params_of(index int) string {
 
 // ---- fixtures -----------------------------------------------------------
 //
-// Real-shaped aria2 payloads, trimmed to the fields Fluxget reads. Handwritten
-// rather than captured so the important shape decisions stay visible.
+// Real-shaped aria2 payloads, trimmed to the fields Fluxget reads.
+//
+// "Handwritten" turned out to be the problem, not the saving. The error fixture
+// below originally carried `"error":"Connection failed"`, a key aria2 does not
+// have, and every test agreed that a failure's reason arrived intact - while the
+// real engine sent `errorMessage` and the UI said "no reason given" for every
+// failure. A fixture written from memory is a fixture that encodes a wish.
+//
+// So these are now COPIED from real aria2 1.37.0 responses on this machine, and
+// the key names are load-bearing. When you add a field, capture it: run
+// `aria2c --enable-rpc --rpc-listen-port=NNNN` and ask it. The contract test
+// `test_a_real_aria2_failure_payload_decodes_to_the_reason` pins the exact shape
+// so this cannot drift back.
 
 const fixture_status_active = '{"gid":"2089b05ecca3d829","status":"active","totalLength":"1048576","completedLength":"524288","uploadLength":"1024","downloadSpeed":"131072","uploadSpeed":"2048","connections":"4","numPieces":"64","pieceLength":"16384","dir":"/downloads","files":[{"index":"1","path":"/downloads/big.iso","length":"1048576","selected":"true"}]}'
 
 const fixture_status_complete = '{"gid":"aaaaaaaaaaaaaa01","status":"complete","totalLength":"2097152","completedLength":"2097152","downloadSpeed":"0","uploadSpeed":"0","seeder":"true","infoHash":"0123456789abcdef0123456789abcdef01234567","dir":"/downloads/linux-image","numSeeders":"42","numLeechers":"3","pieceLength":"131072","numPieces":"16"}'
 
-const fixture_status_error = '{"gid":"bbbbbbbbbbbbbb02","status":"error","totalLength":"100","completedLength":"0","error":"Connection failed","errorCode":"3","dir":"/downloads"}'
+// Captured verbatim from aria2 1.37.0 for a download of an unsupported protocol.
+// Note what is NOT here: there is no "error" key, and errorCode is a STRING.
+const fixture_status_error = '{"gid":"910f7f5c4e3ad7a4","status":"error","totalLength":"0","completedLength":"0","uploadLength":"0","downloadSpeed":"0","connections":"0","errorCode":"1","errorMessage":"gopher is not supported yet.","dir":"/downloads","numPieces":"0","pieceLength":"1048576"}'
 
 const fixture_global_stat = '{"downloadSpeed":"131072","uploadSpeed":"2048","numActive":"1","numWaiting":"2","numStopped":"3","numStoppedTotal":"7"}'
 
