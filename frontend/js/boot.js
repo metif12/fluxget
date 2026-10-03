@@ -27,6 +27,13 @@
 	var inFlight = false;
 	var consecutiveErrors = 0;
 	var chart = null;
+	// selectedIndex starts at -1 and is set to 0 by the first render that has rows.
+	//
+	// Not a detail: the row actions are revealed by `.row.is-selected`, so with no
+	// selection a queue shows no buttons AND space does nothing. A download manager
+	// whose keyboard path needs one arrow press before it can pause anything is a
+	// keyboard path nobody uses. The first render selects the first row, and the
+	// selection is by GID afterwards so it survives a row completing.
 	var selectedIndex = -1;
 
 	function el(id) {
@@ -77,41 +84,53 @@
 
 	// ---- notices ---------------------------------------------------------
 
-	// seen is every notice we have been handed, newest last, and a toast is
-	// derived from it. Holding the notices instead of the DOM is what lets a
-	// locale switch re-word a toast that is still on screen, and it is what makes
-	// "delivered exactly once" checkable: the count is derived from the payload,
-	// not from how many times a handler ran.
+	// seen is every notice we have been handed, newest last, and `nodes` holds one
+	// DOM node per entry still on screen. Holding the notices instead of just the
+	// DOM is what lets a locale switch re-word a toast that is still visible.
 	var seen = [];
+	var nodes = [];
 	var VISIBLE_TOASTS = 3;
 
-	function note(n) {
-		seen.push(n);
-		trim_toasts();
+	function make_toast_node(n) {
+		var node = document.createElement("div");
+		node.className = "toast";
+		node.setAttribute("data-kind", n.kind);
+		node.textContent = window.I18n.compose_notice(n);
+		return node;
 	}
 
-	// trim_toasts keeps the newest VISIBLE_TOASTS and forgets the rest. An
-	// unbounded toast stack is a second queue, and it covers the queue it is
-	// reporting on. Forgetting is safe because a notice is history, not state:
-	// the log and the queue both still know what happened.
-	function trim_toasts() {
-		var start = Math.max(0, seen.length - VISIBLE_TOASTS);
-		var box = el("toasts");
-		box.innerHTML = "";
-		for (var i = start; i < seen.length; i++) {
-			var node = document.createElement("div");
-			node.className = "toast";
-			node.setAttribute("data-kind", seen[i].kind);
-			node.textContent = window.I18n.compose_notice(seen[i]);
-			box.appendChild(node);
+	// note appends ONE toast.
+	//
+	// The first version rebuilt the whole list on every notice, and that turned out
+	// to be a real bug rather than a style choice: rebuilding re-creates the nodes,
+	// which restarts the toast-in animation, so the older toasts fade out and back
+	// in whenever a new one arrives - and when notices arrive as fast as the tick
+	// (a download retrying, say) they sit at opacity 0 permanently and are invisible.
+	// Caught by driving the page with a tick that always carries a notice.
+	//
+	// Appending one node and dropping one old node is O(1) and leaves the existing
+	// animations alone.
+	function note(n) {
+		seen.push(n);
+		nodes.push(make_toast_node(n));
+		el("toasts").appendChild(nodes[nodes.length - 1]);
+		// An unbounded toast stack is a second queue, and it covers the queue it is
+		// reporting on. Forgetting is safe because a notice is history, not state:
+		// the queue and the log both still know what happened.
+		while (nodes.length > VISIBLE_TOASTS) {
+			var old = nodes.shift();
+			seen.shift();
+			if (old && old.parentNode) { old.parentNode.removeChild(old); }
 		}
 	}
 
-	// render_toasts exists so a locale switch re-composes the SAME notices. It
-	// does not re-fetch anything and it does not re-add them - compose_notice is
-	// pure, which is the property that makes this possible.
+	// render_toasts re-composes the SAME notices in place, for a locale switch. It
+	// does not re-fetch and it does not re-create, because re-creating would restart
+	// the animation for the same reason note() avoids it.
 	function render_toasts() {
-		trim_toasts();
+		for (var i = 0; i < nodes.length && i < seen.length; i++) {
+			nodes[i].textContent = window.I18n.compose_notice(seen[i]);
+		}
 	}
 
 	// drain_notices consumes a tick's notice array. The native side delivers each
@@ -190,14 +209,25 @@
 		// the same index: a completed item drops out of `active` and the queue
 		// shifts, and a selection that jumps to a different file on completion is
 		// how space gets pressed on the wrong download.
-		if (selectedIndex >= 0) {
+		if (selectedIndex < 0) {
+			// First render with rows: select the top one, so the actions are
+			// reachable without a prior keypress. (See the note on selectedIndex.)
+			selectedIndex = list.length > 0 ? 0 : -1;
+		} else {
 			var gid = list[selectedIndex] ? list[selectedIndex].gid : null;
 			if (gid) {
+				var found = false;
 				for (var k = 0; k < list.length; k++) {
-					if (list[k].gid === gid) { selectedIndex = k; break; }
+					if (list[k].gid === gid) {
+						selectedIndex = k;
+						found = true;
+						break;
+					}
 				}
+				if (!found) { selectedIndex = Math.min(selectedIndex, list.length - 1); }
+			} else {
+				selectedIndex = list.length > 0 ? 0 : -1;
 			}
-			if (selectedIndex >= list.length) { selectedIndex = list.length - 1; }
 		}
 		apply_selection();
 	}
@@ -207,7 +237,7 @@
 		row.className = "row " + status_class(d.status);
 		row.setAttribute("data-gid", d.gid);
 		row.setAttribute("role", "listitem");
-		// Not focusable: the list manages focus with a single tabindex on the
+		// Not focusable: the list manages focus with a single tab stop on the
 		// container, so one Tab reaches the queue and the arrows move within it.
 		// Making every row a tab stop would make a 500-item queue unusable.
 		row.setAttribute("data-index", String(index));
@@ -226,9 +256,16 @@
 		if (d.is_torrent) { badges.appendChild(badge("BT", "torrent")); }
 		// A finished torrent that is still uploading is NOT complete, and showing
 		// it as done is the small lie a download manager tells.
-		if (d.seeder) { badges.appendChild(badge("seeding", "seed")); }
+		if (d.seeder) { badges.appendChild(badge(t("row.seeding"), "seed")); }
 		if (d.error) { badges.appendChild(badge(d.error, "err")); }
 		head.appendChild(badges);
+
+		// The buttons live between the badges and the status word, and they are
+		// per-row rather than in the pane header on purpose: a header button acts
+		// on "the selection", which is a concept this UI does not otherwise have.
+		// A row that is operable by its own buttons is operable by a keyboard user
+		// who never touched the mouse.
+		head.appendChild(actions_for(d));
 
 		var state = document.createElement("span");
 		state.className = "row__state";
@@ -253,6 +290,88 @@
 		row.appendChild(foot);
 
 		return row;
+	}
+
+	// actions_for builds the buttons a download's CURRENT STATE supports.
+	//
+	// Which buttons exist is a function of the status, and that is the whole
+	// design: offering "pause" on a finished download invites a refusal from aria2
+	// that arrives as an error toast and looks like the app being broken.
+	//
+	// The first version excluded `pause` on an ACTIVE download, on the theory that
+	// aria2 refuses it. It does not - `aria2.pause` on an active download is the
+	// single most common thing anyone does to a download manager, and
+	// `aria2.forcePause` is the different call I was thinking of. That mistake
+	// removed the app's most-used button from its most common row state.
+	//
+	// So: terminal states get retry, everything live gets pause or resume, and
+	// every row gets remove. There is deliberately no second "forget" button -
+	// remove already discards the record, and two buttons that differ only in
+	// whether a row disappears from the history is a distinction with no user.
+	function actions_for(d) {
+		var box = document.createElement("span");
+		box.className = "row__actions";
+		var terminal = d.status === "complete" || d.status === "error" || d.status === "removed";
+		if (terminal) {
+			box.appendChild(action_button("retry", t("row.retry"), "fluxget.retry", { gid: d.gid }));
+		} else if (d.status === "paused") {
+			box.appendChild(action_button("resume", t("row.resume"), "fluxget.resume", { gid: d.gid }));
+		} else {
+			box.appendChild(action_button("pause", t("row.pause"), "fluxget.pause", { gid: d.gid }));
+		}
+		// keep_record:false is the explicit form of what remove means to a user:
+		// the row leaves the list and the history, not just the queue.
+		box.appendChild(action_button("remove", t("row.remove"), "fluxget.remove",
+			{ gid: d.gid, keep_record: false }));
+		return box;
+	}
+
+	function action_button(kind, label, command, params) {
+		var b = document.createElement("button");
+		b.className = "act";
+		b.setAttribute("type", "button");
+		b.setAttribute("data-kind", kind);
+		b.textContent = label;
+		b.title = label;
+		// One handler for every button rather than one per kind: the command and
+		// the payload are data on the element, so adding an action is a line in
+		// actions_for and nowhere else.
+		b.addEventListener("click", function (ev) {
+			ev.stopPropagation();
+			run_command(b, command, params);
+		});
+		return b;
+	}
+
+	// run_command is the one path from a button to the bridge, and it owns the two
+	// things every action needs:
+	//
+	//   * the button is disabled for the duration, so a double click cannot queue
+	//     two removes of the same gid;
+	//   * a refusal is shown, not swallowed. aria2's own sentence arrives as the
+	//     rejection text, and a UI that discards it is a UI where a button press
+	//     that failed looks exactly like one that worked.
+	//
+	// There is deliberately no optimistic update here. The next tick is at most a
+	// second away and it is the only thing that knows the truth, so guessing would
+	// mean showing a state the engine may never reach.
+	function run_command(button, command, params) {
+		if (button.disabled) { return; }
+		button.disabled = true;
+		window.vails.call(command, JSON.stringify(params)).then(function (result) {
+			button.disabled = false;
+			// set_item_options answers with the options aria2 REFUSED, so a payload
+			// that is not "ok" is a problem even though the call succeeded. Anything
+			// else is reported the same way, because "it said no to this option" is
+			// exactly what a user needs to see.
+			if (command === "fluxget.set_item_options" && result !== "ok") {
+				note({ kind: "failed", name: params.gid || "", error: result, text: result });
+			}
+			tick();
+		}).catch(function (e) {
+			button.disabled = false;
+			note({ kind: "failed", name: params.gid || "", error: String(e), text: String(e) });
+		});
 	}
 
 	function span(cls, text) {
@@ -448,18 +567,27 @@
 	}
 
 	document.addEventListener("keydown", function (ev) {
-		// In an RTL layout the LEFT arrow is the one that moves forward in a
-		// logical order, but a LIST is read top to bottom, so up/down stay up/down
-		// in both directions. Only the explicit "move in the queue" action is
-		// mirrored, and it is not bound to an arrow at all until Phase 3 has the
-		// move command.
 		if (ev.key === "Escape") {
 			if (!el("help").hidden) { toggle_help(false); ev.preventDefault(); }
+			if (!el("settings").hidden) { toggle_settings(false); ev.preventDefault(); }
 			return;
 		}
 		if (typing_in(ev.target)) {
 			// Enter submits the add box (the form's own handler), and nothing else
 			// is stolen while someone is typing a URL.
+			return;
+		}
+		// A list is read top to bottom in both directions, so up and down stay up
+		// and down. What IS mirrored is "move the selection in the queue", because
+		// that is an operation on a LOGICAL order and a logical order reverses.
+		// Getting this wrong in an RTL UI means ctrl+up moves a row the opposite
+		// way from what the arrow points at.
+		if (ev.ctrlKey && (ev.key === "ArrowUp" || ev.key === "ArrowDown")) {
+			ev.preventDefault();
+			move_selection_in_queue(ev.key === "ArrowUp" ? -1 : 1);
+			return;
+		}
+		if (ev.ctrlKey) {
 			return;
 		}
 		switch (ev.key) {
@@ -478,11 +606,27 @@
 				break;
 			case " ":
 				ev.preventDefault();
-				toast_selected_state();
+				// Space is "toggle the selection's run state", which is pause on a
+				// live download and resume on a paused one. It clicks the button
+				// that exists, so the key cannot offer an action the buttons do not.
+				press_selected(is_selected_paused() ? "resume" : "pause");
+				break;
+			case "Delete":
+			case "Backspace":
+				ev.preventDefault();
+				press_selected("remove");
+				break;
+			case "r":
+				ev.preventDefault();
+				press_selected("retry");
 				break;
 			case "a":
 				ev.preventDefault();
 				submit_add();
+				break;
+			case "s":
+				ev.preventDefault();
+				toggle_settings(true);
 				break;
 			case "t":
 				ev.preventDefault();
@@ -499,20 +643,172 @@
 		}
 	});
 
-	// Phase 2 has no pause/resume command in the manifest yet - that is Phase 3's
-	// "Control + settings". Until then space says what the selection IS rather than
-	// silently doing nothing, and says where the real key is coming from.
-	function toast_selected_state() {
+	function is_selected_paused() {
+		if (selectedIndex < 0 || selectedIndex >= last_downloads.length) { return false; }
+		return last_downloads[selectedIndex].status === "paused";
+	}
+
+	// move_selection_in_queue reorders aria2's queue, which is a different thing
+	// from moving the selection cursor and lives on the server: aria2 holds the
+	// order, so a client-side shuffle would be undone by the next tick.
+	function move_selection_in_queue(delta) {
 		var gid = selected_gid();
 		if (!gid) {
-			note({ kind: "info", text: t("shortcuts.phase3") });
+			note({ kind: "info", text: t("shortcuts.none-selected") });
 			return;
 		}
-		note({ kind: "info", gid: gid, name: gid, text: "pause " + gid + " → Phase 3" });
+		window.vails.call("fluxget.move", JSON.stringify({ gid: gid, delta: delta })).then(function () {
+			tick();
+		}).catch(function (e) {
+			note({ kind: "failed", name: gid, error: String(e), text: String(e) });
+		});
+	}
+
+		// Phase 2 bound space to a message saying pause was not implemented yet. It is
+	// implemented, so the key now does the thing it always promised - and it picks
+	// between pause and resume from the selection's status, which is why it reads
+	// the row rather than sending a fixed command.
+	//
+	// The buttons are found through the row's own DOM instead of rebuilding the
+	// command from the download object, so the keyboard and the mouse can never
+	// disagree about what an action is: there is one set of buttons, and this
+	// clicks the right one.
+	function press_selected(action) {
+		var rows = el("rows").querySelectorAll(".row");
+		if (selectedIndex < 0 || selectedIndex >= rows.length) {
+			note({ kind: "info", text: t("shortcuts.none-selected") });
+			return;
+		}
+		var button = rows[selectedIndex].querySelector('.act[data-kind="' + action + '"]');
+		if (!button) {
+			// A finished download has no pause button, and pretending the key is
+			// broken is better than silently doing nothing.
+			note({ kind: "info", text: t("shortcuts.not-applicable", { action: action }) });
+			return;
+		}
+		button.click();
 	}
 
 	function toggle_help(show) {
 		el("help").hidden = !show;
+	}
+
+	// ---- settings --------------------------------------------------------
+
+	// open_settings reads the document BEFORE showing the dialog, because the
+	// dialog is an editor of the file, not of whatever the fields happen to hold
+	// from last time. Getting that backwards is how a dialog ends up saving the
+	// stale values it was initialised with.
+	function toggle_settings(show) {
+		if (!show) {
+			el("settings").hidden = true;
+			return;
+		}
+		window.vails.call("fluxget.get_settings", "").then(function (raw) {
+			fill_settings(raw);
+			el("settings").hidden = false;
+		}).catch(function (e) {
+			note({ kind: "failed", text: "fluxget.get_settings: " + String(e) });
+			el("settings").hidden = false;
+		});
+	}
+
+	// fill_settings paints the form from the SettingsView.
+	//
+	// The numbers go in as the RAW integers aria2 holds, not as "1.0 MiB/s". The
+	// document stores bytes per second, so a value shown pre-formatted would have
+	// to be parsed back on save - and that parse is a second formatter disagreeing
+	// with the first at exactly the rounding boundary that matters.
+	function fill_settings(raw) {
+		var view;
+		try {
+			view = JSON.parse(raw);
+		} catch (e) {
+			show_settings_notes([t("settings.bad-payload", { detail: String(raw).slice(0, 120) })]);
+			return;
+		}
+		var s = view.settings || {};
+		set_number("max_concurrent", s.max_concurrent);
+		set_number("max_per_server", s.max_per_server);
+		set_number("split", s.split);
+		set_number("min_split_size", s.min_split_size);
+		set_number("download_limit", s.download_limit);
+		set_number("upload_limit", s.upload_limit);
+		set_text("dir", s.dir);
+		set_text("seed_ratio", s.seed_ratio);
+		set_text("seed_time", s.seed_time);
+		el("set-bt_enabled").checked = s.bt_enabled === true;
+		el("set-save_session").checked = s.save_session === true;
+		el("settings-path").textContent = view.path || "";
+		show_settings_notes(view.notes || []);
+	}
+
+	function set_number(field, value) {
+		var node = el("set-" + field);
+		node.value = (typeof value === "number") ? String(value) : "";
+	}
+
+	function set_text(field, value) {
+		el("set-" + field).value = typeof value === "string" ? value : "";
+	}
+
+	// show_settings_notes surfaces what the last save actually did.
+	//
+	// This is the visible half of the rule in platform/settings_cmd.v: "saved" and
+	// "in force" are different claims. A refused limit comes back in `notes`, and a
+	// dialog that dropped them would be reporting a setting the engine never
+	// accepted.
+	function show_settings_notes(notes) {
+		var box = el("settings-notes");
+		box.innerHTML = "";
+		if (!notes || !notes.length) {
+			box.hidden = true;
+			return;
+		}
+		box.hidden = false;
+		box.textContent = notes.join(" · ");
+	}
+
+	// save_settings sends the whole document.
+	//
+	// The WHOLE document rather than a patch, because that is what the command
+	// means and what the file holds: a partial update would need a merge rule on
+	// both sides, and the one field both sides have to agree on is which document
+	// is current. An empty number field is sent as 0 rather than omitted, so
+	// clearing a limit means "no limit" and not "leave it alone".
+	function save_settings(ev) {
+		if (ev) { ev.preventDefault(); }
+		var payload = {
+			max_concurrent: number_or_zero("max_concurrent"),
+			max_per_server: number_or_zero("max_per_server"),
+			download_limit: number_or_zero("download_limit"),
+			upload_limit: number_or_zero("upload_limit"),
+			split: number_or_zero("split"),
+			min_split_size: number_or_zero("min_split_size"),
+			dir: el("set-dir").value.trim(),
+			bt_enabled: el("set-bt_enabled").checked,
+			seed_ratio: el("set-seed_ratio").value.trim(),
+			seed_time: el("set-seed_time").value.trim(),
+			save_session: el("set-save_session").checked
+		};
+		var button = el("settings-save");
+		button.disabled = true;
+		window.vails.call("fluxget.set_settings", JSON.stringify(payload)).then(function (raw) {
+			button.disabled = false;
+			fill_settings(raw);
+			note({ kind: "info", text: t("settings.saved") });
+			tick();
+		}).catch(function (e) {
+			button.disabled = false;
+			show_settings_notes([t("settings.refused", { detail: String(e) })]);
+			note({ kind: "failed", text: String(e) });
+		});
+	}
+
+	function number_or_zero(field) {
+		var raw = el("set-" + field).value;
+		var n = parseInt(raw, 10);
+		return isFinite(n) ? n : 0;
 	}
 
 	el("helpclose").addEventListener("click", function () { toggle_help(false); });
@@ -523,6 +819,24 @@
 	el("helpbtn").addEventListener("click", function () { toggle_help(true); });
 	el("themebtn").addEventListener("click", function () { window.I18n.toggle_theme(); });
 	el("localebtn").addEventListener("click", function () { window.I18n.toggle_locale(); });
+	el("settingsbtn").addEventListener("click", function () { toggle_settings(true); });
+	el("settings-cancel").addEventListener("click", function () { toggle_settings(false); });
+	el("settings").addEventListener("click", function (ev) {
+		if (ev.target === el("settings")) { toggle_settings(false); }
+	});
+	el("settingsform").addEventListener("submit", save_settings);
+
+	// The two global switches live in the queue pane's header, because they act on
+	// everything rather than on a row - and putting them there keeps the row
+	// buttons meaning "this download".
+	function wire_global_button(id, command) {
+		el(id).addEventListener("click", function () {
+			run_command(el(id), command, {});
+		});
+	}
+	wire_global_button("pauseall", "fluxget.pause_all");
+	wire_global_button("resumeall", "fluxget.resume_all");
+	wire_global_button("clearhistory", "fluxget.forget_all");
 
 	// ---- go ---------------------------------------------------------------
 

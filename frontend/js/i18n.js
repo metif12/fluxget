@@ -82,15 +82,54 @@
 			"shortcuts.body":
 				"/            focus the add box\n" +
 				"\u2191 \u2193          select a download\n" +
-				"space        say what is selected (pause lands in Phase 3)\n" +
+				"space        pause or resume the selection\n" +
+				"ctrl + \u2191 \u2193   move it in the queue\n" +
+				"delete       remove the selection\n" +
+				"r            retry the selection\n" +
 				"a            add whatever is in the add box\n" +
+				"s            settings\n" +
 				"t            toggle the theme\n" +
 				"l            toggle fa / en\n" +
 				"?            this list\n" +
 				"esc          close this",
-			"shortcuts.phase3": "No download is selected. Arrow keys select one; pausing arrives in Phase 3.",
-
+			"shortcuts.none-selected": "Nothing is selected. The arrow keys select a download.",
+			"shortcuts.not-applicable": "{action} does not apply to this download.",
 			"chart.empty": "waiting for the first sample",
+
+			// ---- row actions
+			"row.pause": "pause",
+			"row.resume": "resume",
+			"row.retry": "retry",
+			"row.remove": "remove",
+			"row.forget": "forget",
+			"row.seeding": "seeding",
+
+			// ---- queue-wide
+			"queue.pauseall": "pause all",
+			"queue.resumeall": "resume all",
+			"queue.clear": "clear history",
+
+			// ---- settings
+			"settings.open": "settings",
+			"settings.title": "Settings",
+			"settings.save": "save",
+			"settings.cancel": "close",
+			"settings.saved": "Settings saved and applied.",
+			"settings.legend.limits": "limits",
+			"settings.legend.place": "files",
+			"settings.max_concurrent": "downloads at once",
+			"settings.max_per_server": "connections each",
+			"settings.split": "split",
+			"settings.min_split_size": "smallest split (bytes)",
+			"settings.download_limit": "download limit (bytes/s, 0 = unlimited)",
+			"settings.upload_limit": "upload limit (bytes/s, 0 = unlimited)",
+			"settings.dir": "download folder (empty = your Downloads)",
+			"settings.bt_enabled": "BitTorrent",
+			"settings.save_session": "remember the queue across restarts",
+			"settings.seed_ratio": "seed ratio",
+			"settings.seed_time": "seed time (min, 0 = forever)",
+			"settings.refused": "Not applied: {detail}",
+			"settings.bad-payload": "The settings came back unreadable: {detail}",
 
 			"engine.never-started": "not started yet",
 			"engine.missing": "not installed",
@@ -145,15 +184,54 @@
 			"shortcuts.body":
 				"/            رفتن به کادر افزودن\n" +
 				"↑ ↓          انتخاب یک دانلود\n" +
-				"space        گفتن وضعیت انتخاب‌شده (مکث در مرحلهٔ ۳)\n" +
+				"space        مکث یا ادامهٔ انتخاب‌شده\n" +
+				"ctrl + ↑ ↓   جابه‌جایی در صف\n" +
+				"delete       حذف انتخاب‌شده\n" +
+				"r            تلاش دوباره برای انتخاب‌شده\n" +
 				"a            افزودن محتوای کادر\n" +
+				"s            تنظیمات\n" +
 				"t            تغییر پوسته\n" +
 				"l            تغییر فارسی / انگلیسی\n" +
 				"?            همین فهرست\n" +
 				"esc          بستن",
-			"shortcuts.phase3": "هیچ دانلودی انتخاب نشده است. با کلیدها آن انتخاب کنید؛ مکث در مرحلهٔ ۳ می‌آید.",
-
+			"shortcuts.none-selected": "هیچ‌چیز انتخاب نشده است. با کلیدهای جهت یک دانلود را انتخاب کنید.",
+			"shortcuts.not-applicable": "{action} برای این دانلود معنا ندارد.",
 			"chart.empty": "منتظر نخستین نمونه",
+
+			// ---- row actions
+			"row.pause": "مکث",
+			"row.resume": "ادامه",
+			"row.retry": "تلاش دوباره",
+			"row.remove": "حذف",
+			"row.forget": "پاک کردن",
+			"row.seeding": "در حال پخش",
+
+			// ---- queue-wide
+			"queue.pauseall": "مکث همه",
+			"queue.resumeall": "ادامهٔ همه",
+			"queue.clear": "پاک کردن تاریخچه",
+
+			// ---- settings
+			"settings.open": "تنظیمات",
+			"settings.title": "تنظیمات",
+			"settings.save": "ذخیره",
+			"settings.cancel": "بستن",
+			"settings.saved": "تنظیمات ذخیره و اعمال شد.",
+			"settings.legend.limits": "محدودیت‌ها",
+			"settings.legend.place": "فایل‌ها",
+			"settings.max_concurrent": "تعداد هم‌زمان",
+			"settings.max_per_server": "اتصال برای هرکدام",
+			"settings.split": "تقسیم",
+			"settings.min_split_size": "کوچک‌ترین بخش (بایت)",
+			"settings.download_limit": "سقف دانلود (بایت بر ثانیه، ۰ = بدون سقف)",
+			"settings.upload_limit": "سقف آپلود (بایت بر ثانیه، ۰ = بدون سقف)",
+			"settings.dir": "پوشهٔ دانلود (خالی = Downloads شما)",
+			"settings.bt_enabled": "بیت‌تورنت",
+			"settings.save_session": "به یاد سپردن صف پس از بستن برنامه",
+			"settings.seed_ratio": "نسبت پخش",
+			"settings.seed_time": "زمان پخش (دقیقه، ۰ = همیشه)",
+			"settings.refused": "اعمال نشد: {detail}",
+			"settings.bad-payload": "تنظیمات خوانده نشد: {detail}",
 
 			"engine.never-started": "هنوز آغاز نشده",
 			"engine.missing": "نصب نیست",

@@ -8,12 +8,13 @@ that uses the OS webview instead of bundling a browser engine.
 V 0.5.2  ·  vails 0.2.0  ·  aria2 1.37  ·  no npm, no CDN, no bundler
 ```
 
-> **Status: Phase 2 complete.** The window opens, the bridge round-trips, and
+> **Status: Phase 3 complete.** The window opens, the bridge round-trips, and
 > **a real download runs**: Fluxget finds aria2c, spawns it, speaks JSON-RPC to
-> it, and shows the queue live. The UI is now RTL-first Persian with an English
-> switch, two themes, keyboard navigation and a live speed chart, and the
-> production build ships as **one packed document**. Phases 3-8 are
-> [re-planned](#roadmap) around competitive parity with Surge.
+> it, and shows the queue live. Every row is operable from its own buttons and from
+> the keyboard, the limits a user sets are pushed to the engine and **verified
+> against what aria2 actually holds**, and the production build ships as **one
+> packed document**. Phases 4-8 are [re-planned](#roadmap) around competitive
+> parity with Surge.
 
 ![Phase 1: a real 1 MiB download, complete, with the Finished notice](tests/e2e_windows/phase1-download.png)
 
@@ -47,6 +48,52 @@ there at all** because `rpc/rpc.v` was reading a JSON key that aria2 has never
 sent: `rpc/fake.v`'s fixture also said `error`, so a green suite agreed with a
 decoder that was wrong. Fixed against a captured `aria2c 1.37.0` response; see
 [AGENTS.md](AGENTS.md#and-since-phase-1).
+
+### Phase 3: a row you can operate, and settings that are actually in force
+
+![Phase 3: the release binary, an errored row selected and offering retry and remove](tests/e2e_windows/phase3-packed-fa-rows.png)
+
+That is the **release** binary again, with a real `aria2c` child. The selected row
+is a download that failed, and it offers exactly the two actions that make sense
+for a failed download — `تلاش دوباره` and `حذف`. Which buttons exist is a function
+of the row's status, because offering "pause" on a finished download invites a
+refusal from aria2 that arrives as an error toast and looks like the app breaking.
+
+The settings dialog is where the phase's actual idea lives, and it is one rule:
+
+**"saved" and "in force" are different claims.** `store/` clamps every value on
+the way in and reports the correction, `platform/settings_cmd.v` pushes to
+`changeGlobalOption`, reads back what aria2 actually holds, and only then persists
+— so the document can never keep asking for a value the engine already refused. A
+value aria2 rejects is rewritten from aria2's own echo rather than from the user's
+wish, and the dialog shows what happened:
+
+![Phase 3: the settings dialog, RTL, three columns, with the note that a value was corrected](tests/e2e_windows/phase3-ui-settings.png)
+
+*(That one, and `phase3-ui-rows.png`, are layout proofs taken in a browser against
+the dev server with a **stubbed bridge** — they show layout, CSS and i18n and prove
+nothing about the commands. The reasons and the limits are written down in
+[tests/e2e_windows/README.md](tests/e2e_windows/README.md#phase-3---every-row-operable-and-settings-that-survive-a-restart).)*
+
+Three things the tests caught, all of them mine and all of them the kind of bug that
+compiles:
+
+- `RemoveParams.purge` was defaulted to `true` and then **overwritten by the
+  decoder**, because a JSON body that omits a bool decodes it as `false`. Every
+  payload the frontend sends left the history intact. The flag is now
+  `keep_record`, whose *zero* value is the wanted behaviour.
+- `read_back_settings` parsed an absent key as `0`, so an engine that echoed only
+  `split` silently reset every other limit to zero. A read-back must be
+  non-destructive.
+- `window_ready` held the state mutex and called a function that locks it again —
+  a **deadlock**. The app painted and then ignored every key, and the screenshot
+  tool hung. Now no function that takes the lock may call one that does.
+
+And one that only real aria2 could have told us: **`retry` did not work.** For a
+download in `error`, `aria2.getUris` answers *"No URI data is available"* — so the
+one case retry exists for is the one case where the engine cannot say where the
+download came from. `core.State` now remembers what Fluxget was asked to download,
+and a download neither source knows for says what to do instead: add it again.
 
 ---
 
@@ -242,7 +289,7 @@ competitive value, not by what happened to be built first.
 | **0.5** ✅ | The seam, the contract, `vails.lock`, compat reports | 13 contract tests green |
 | **1** ✅ | `aria2ctl/` + `core/` + `engine/`, real download in the UI | a real download visible in the window |
 | **2** ✅ | **Product feel** — design system, i18n with `fa` RTL, light + dark, keyboard shortcuts, speed charts, `tools/pack` | switch language and theme live; a chart redraws every tick; the packed document runs |
-| **3** | **Control + settings** — pause/resume/remove/retry/move, global and per-item limits, `store/` | every row operable; limits and settings survive a restart |
+| **3** ✅ | **Control + settings** — pause/resume/remove/retry/move, global and per-item limits, `store/` | every row operable; limits and settings survive a restart |
 | **4** | **Speed + mirrors** — adaptive connections, mirror sets with liveness probing, force-sequential streaming, checksums, `fluxget bench` | `bench` publishes numbers against aria2c/curl **including where we lose**; a dead mirror is dropped and the set continues |
 | **5** | **Torrents** — magnet and `.torrent`, peers, trackers, file selection, seed policy | a magnet and a `.torrent` both finish |
 | **6** | **Automation** — Control API, browser extension, CLI, headless mode, shell completion, autostart | a Chrome download reaches Fluxget; `fluxget add` drives a running instance |

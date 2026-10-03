@@ -48,6 +48,8 @@
 		<div class="tools">
 			<button class="tool" id="localebtn" type="button" title="l">فارسی</button>
 			<button class="tool" id="themebtn" type="button" title="t">◐</button>
+			<button class="tool" id="settingsbtn" type="button" title="s"
+				data-i18n="settings.open">settings</button>
 			<button class="tool" id="helpbtn" type="button" data-i18n-attr="aria-label:shortcuts.title">?</button>
 		</div>
 	</header>
@@ -104,6 +106,14 @@
 		<section class="pane pane--queue">
 			<div class="pane__head">
 				<h2 class="pane__title" data-i18n="pane.downloads">downloads</h2>
+				<!-- Global switches, next to the queue they act on. They are
+				     buttons rather than shortcuts on purpose: pausing EVERYTHING is
+				     not a thing to do by accident while reaching for a single row. -->
+				<span class="pane__tools">
+					<button class="act" id="pauseall" type="button" data-i18n="queue.pauseall">pause all</button>
+					<button class="act" id="resumeall" type="button" data-i18n="queue.resumeall">resume all</button>
+					<button class="act" id="clearhistory" type="button" data-i18n="queue.clear">clear history</button>
+				</span>
 				<span class="pane__count" id="queue-count">0</span>
 			</div>
 			<!--
@@ -149,6 +159,87 @@
 	</main>
 
 	<div class="toasts" id="toasts" aria-live="polite"></div>
+
+	<!-- Settings.
+	     A <form> so the fields are grouped and so Enter submits, and a dialog
+	     rather than a pane because a limit is something you set once and then
+	     stop looking at. The numbers are bytes per second as RAW integers - the
+	     "MiB/s" a user thinks in is converted on the way in and back on the way
+	     out, so the stored value is the same one aria2 holds. -->
+	<div class="dialog" id="settings" hidden role="dialog" aria-modal="true">
+		<form class="dialog__panel" id="settingsform">
+			<div class="dialog__head">
+				<h2 class="dialog__title" data-i18n="settings.title">Settings</h2>
+				<span class="dialog__path" id="settings-path" dir="ltr"></span>
+			</div>
+
+			<fieldset class="fieldset">
+				<legend class="fieldset__legend" data-i18n="settings.legend.limits">limits</legend>
+				<div class="grid">
+					<label class="field">
+						<span class="field__k" data-i18n="settings.max_concurrent">concurrent downloads</span>
+						<input class="field__v" id="set-max_concurrent" type="number" min="1" max="100" step="1" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.max_per_server">connections each</span>
+						<input class="field__v" id="set-max_per_server" type="number" min="1" max="16" step="1" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.split">split</span>
+						<input class="field__v" id="set-split" type="number" min="1" max="16" step="1" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.min_split_size">min split size (bytes)</span>
+						<input class="field__v" id="set-min_split_size" type="number" min="1024" step="1024" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.download_limit">download limit (bytes/s, 0 = no limit)</span>
+						<input class="field__v" id="set-download_limit" type="number" min="0" step="1024" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.upload_limit">upload limit (bytes/s, 0 = no limit)</span>
+						<input class="field__v" id="set-upload_limit" type="number" min="0" step="1024" />
+					</label>
+				</div>
+			</fieldset>
+
+			<fieldset class="fieldset">
+				<legend class="fieldset__legend" data-i18n="settings.legend.place">files</legend>
+				<div class="grid">
+					<label class="field field--wide">
+						<span class="field__k" data-i18n="settings.dir">download folder (empty = your Downloads)</span>
+						<input class="field__v field__v--text" id="set-dir" type="text" dir="ltr" spellcheck="false" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.seed_ratio">seed ratio</span>
+						<input class="field__v field__v--text" id="set-seed_ratio" type="text" dir="ltr" />
+					</label>
+					<label class="field">
+						<span class="field__k" data-i18n="settings.seed_time">seed time (min, 0 = forever)</span>
+						<input class="field__v field__v--text" id="set-seed_time" type="text" dir="ltr" />
+					</label>
+					<label class="check">
+						<input type="checkbox" id="set-bt_enabled" />
+						<span data-i18n="settings.bt_enabled">BitTorrent</span>
+					</label>
+					<label class="check">
+						<input type="checkbox" id="set-save_session" />
+						<span data-i18n="settings.save_session">remember the queue across restarts</span>
+					</label>
+				</div>
+			</fieldset>
+
+			<!-- What the last save actually did. Not a status line for decoration:
+			     a value the engine refused has to be visible, or the dialog is
+			     claiming a limit that is not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
+
+			<div class="dialog__foot">
+				<button class="act act--wide" id="settings-cancel" type="button" data-i18n="settings.cancel">close</button>
+				<button class="act act--go" id="settings-save" type="submit" data-i18n="settings.save">save</button>
+			</div>
+		</form>
+	</div>
 
 	<!-- Shortcuts. A <dialog> would be nicer and WebView2 has it, but the
 	     element's own key handling differs enough between versions that a

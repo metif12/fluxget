@@ -165,6 +165,52 @@ A probe URL that no longer serves is not an app bug: the screenshot above was
 taken with a host that answers `Got EOF from the server.`, and the row still
 rendered the reason, which is the point.
 
+## Phase 3 - every row operable, and settings that survive a restart
+
+```powershell
+.\scripts\build.ps1
+$env:FLUXGET_SETTINGS = "$env:TEMP\fluxget-e2e\settings.json"   # do not touch your real one
+$env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'
+.\build\fluxget.exe
+.\scripts\capture-window.ps1 -Out tests\e2e_windows\phase3-packed-fa-rows.png
+```
+
+| Check | How | Expected | What it proves |
+|---|---|---|---|
+| row actions | the row is selected on open | `تلاش دوباره` / `حذف` on an errored row | the buttons come from the row's real status |
+| settings | the queue header, no dialog | thirteen options pushed at startup, no refusal notice | `changeGlobalOption` under aria2's own names |
+| settings file | `FLUXGET_SETTINGS` | written on the first save, read on the next start | the document round-trips |
+
+Proof: `phase3-packed-fa-rows.png`, taken from the release binary with a real
+`aria2c` child. `FLUXGET_SETTINGS` is set for the run because the real location is
+`%USERPROFILE%\.fluxget\settings.json` and an e2e run has no business rewriting it.
+
+### The two UI screenshots, and what they are NOT
+
+`phase3-ui-rows.png` and `phase3-ui-settings.png` are **layout proofs taken in a
+normal browser against the dev server with a stubbed `window.vails`**. They exist
+because of one specific gap: the row actions are revealed by `.row.is-selected`
+and the settings dialog opens on a keypress, and an unattended run can do
+neither - so the states that Phase 3 adds could not otherwise be looked at.
+
+They prove layout, CSS and i18n. They prove **nothing** about the bridge: every
+command in them is answered from a table in the init script. The evidence that the
+commands work is `platform/control_test.v` (which asserts the aria2 method and
+arguments on the wire) and the release-binary screenshot above. Do not quote these
+two as evidence that a command works.
+
+```powershell
+# How they were taken, if you want to reproduce one:
+.\build\fluxget.exe --dev                       # serves frontend/ on :8413
+# open http://127.0.0.1:8413/ in a browser with window.vails.call stubbed by an
+# init script, then click #settingsbtn and screenshot.
+```
+
+Two layout bugs were found this way and would not have been found otherwise: the
+settings grid fitted exactly one column at a 420px panel and made the dialog
+taller than the window, and a toast list rebuilt on every notice sat permanently
+at `opacity: 0` because rebuilding restarts the entrance animation.
+
 ### When aria2c is missing
 
 Delete or rename `runtime\aria2c.exe` and start the app. The window must still

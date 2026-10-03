@@ -185,8 +185,16 @@
 	border-radius: var(--r3);
 	box-shadow: var(--shadow);
 	padding: var(--sp-6);
-	min-width: min(420px, 92vw);
+	/* Wide enough for the settings grid to get more than one column. At 420px the
+	   grid's 200px tracks fitted exactly one, and twelve fields became a dialog
+	   taller than the window - with the save button off the bottom. */
+	min-width: min(720px, 92vw);
 	max-width: 92vw;
+	/* The other half of the same problem: twelve fields plus two legends plus the
+	   notes plus the buttons is more than any window has, so the panel scrolls
+	   rather than growing past the frame. */
+	max-height: 88vh;
+	overflow: auto;
 }
 
 .dialog__head {
@@ -283,6 +291,203 @@
 	direction: ltr;
 	unicode-bidi: isolate;
 	text-align: start;
+}
+
+/* ---- buttons ----------------------------------------------------------- */
+
+/* One button style for every action in the app - a row button, a pane button, the
+   settings dialog's save. Three similar-but-different button styles is how a UI
+   ends up looking assembled rather than designed, and a destructive action needs
+   to look like a destructive action in both places. */
+.act {
+	padding: 2px var(--sp-2);
+	background: transparent;
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	color: var(--text-dim);
+	font-family: var(--font);
+	font-size: 11px;
+	line-height: 1.6;
+	cursor: pointer;
+	white-space: nowrap;
+	transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
+		border-color var(--t-fast) var(--ease);
+}
+
+.act:hover:not(:disabled) {
+	background: var(--surface-hi);
+	color: var(--text);
+	border-color: var(--line-strong);
+}
+
+/* Disabled is a press in flight. It stays legible rather than fading to nothing:
+   "did my click land?" is exactly what the user is asking at that moment. */
+.act:disabled {
+	opacity: .5;
+	cursor: default;
+}
+
+/* Destructive by colour alone would fail for a colourblind user and in a
+   screenshot, so remove also carries the one glyph that means it. */
+.act[data-kind="remove"],
+.act[data-kind="forget"] {
+	color: var(--err);
+	border-color: var(--line);
+}
+
+.act[data-kind="remove"]:hover:not(:disabled),
+.act[data-kind="forget"]:hover:not(:disabled) {
+	background: var(--surface-hi);
+	border-color: var(--err);
+}
+
+.act[data-kind="retry"]:hover:not(:disabled) {
+	color: var(--accent);
+	border-color: var(--accent-dim);
+}
+
+.act--go {
+	color: var(--accent);
+	border-color: var(--accent-dim);
+	padding: var(--sp-1) var(--sp-4);
+	font-size: 12px;
+}
+
+.act--wide {
+	padding: var(--sp-1) var(--sp-4);
+	font-size: 12px;
+}
+
+/* ---- the row action strip ---------------------------------------------- */
+
+/* Between the badges and the status word, and hidden until the row is hovered or
+   selected. Always-visible buttons turn a 30-row queue into 90 buttons and hide
+   the download names behind them - but "hidden until hover" is not an option
+   either, because a keyboard user cannot hover. So the rule is hover OR selected,
+   and the selection ring from Phase 2 is what makes the keyboard path work. */
+.row__actions {
+	display: flex;
+	gap: var(--sp-1);
+	flex: 0 0 auto;
+	opacity: 0;
+	transition: opacity var(--t-fast) var(--ease);
+}
+
+.row:hover .row__actions,
+.row:focus-within .row__actions,
+.row.is-selected .row__actions {
+	opacity: 1;
+}
+
+/* ---- pane toolbar ------------------------------------------------------- */
+
+.pane__head {
+	flex-wrap: wrap;
+}
+
+.pane__tools {
+	display: flex;
+	gap: var(--sp-1);
+	flex: 0 0 auto;
+}
+
+/* ---- settings dialog ---------------------------------------------------- */
+
+.dialog__path {
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--text-faint);
+	/* A settings dialog that cannot tell you which file it edits is a settings
+	   dialog a user will not trust with a portable install. */
+	max-width: 46ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fieldset {
+	border: none;
+	margin: 0 0 var(--sp-5);
+	padding: 0;
+}
+
+.fieldset__legend {
+	padding: 0 0 var(--sp-2);
+	font-size: 10px;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: var(--sp-3);
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+	min-width: 0;
+}
+
+.field--wide { grid-column: 1 / -1; }
+
+.field__k {
+	font-size: 11px;
+	color: var(--text-dim);
+}
+
+.field__v {
+	padding: var(--sp-2);
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: var(--r1);
+	color: var(--text);
+	font-family: var(--mono);
+	font-size: 12px;
+	min-width: 0;
+}
+
+.field__v--text { direction: ltr; text-align: start; }
+
+/* The browser's own focus ring is fine here and is deliberately NOT suppressed:
+   this is a form, and a form is the one place where the platform's affordances
+   are better than the ones we would hand-roll. */
+.field__v:focus-visible {
+	border-color: var(--focus);
+	outline: none;
+}
+
+.check {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	font-size: 12px;
+	color: var(--text-dim);
+	cursor: pointer;
+}
+
+.notes {
+	margin: 0 0 var(--sp-4);
+	padding: var(--sp-2) var(--sp-3);
+	background: var(--surface-hi);
+	border-inline-start: 3px solid var(--warn);
+	border-radius: var(--r1);
+	font-size: 11px;
+	color: var(--text-dim);
+}
+
+.notes[hidden] { display: none; }
+
+.dialog__foot {
+	display: flex;
+	justify-content: flex-end;
+	gap: var(--sp-2);
+	padding-block-start: var(--sp-3);
+	border-block-start: 1px solid var(--line);
 }
 
 /* ---- narrow windows ------------------------------------------------------ */
