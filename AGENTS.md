@@ -141,6 +141,11 @@ list is below, and each one is recorded in the file that hit it.
 - `!` **cannot propagate inside `assert`**: `assert f()! == x` fails to compile
   with "to propagate a Result, the call must also return a Result type", because
   `assert` is a statement. Use a helper that returns the value and asserts.
+- **`err` only exists for a Result, never for an Option.** `or { err.msg() }` is
+  correct after a call returning `!T` and does not compile after one returning
+  `?T` — `opt_map`, `opt_arr`, `m['key'] or { }`. An Option has no error to
+  report, so say what you *expected* instead of reaching for a variable that is
+  not there. (Shipped broken once; `build.ps1` cannot see it.)
 - A `mut` method cannot be called on a temporary. `eng(f).add(x)` does not
   compile however it is parenthesised — bind `mut e := eng(f)` first.
 - `if x := expr` is only legal when `expr` is an **Option or a Result**. It is a
@@ -250,6 +255,13 @@ script. It measures what is on disk, or takes a URL the operator supplies.
 ## 8. Definition of done
 
 - `.\scripts\test.ps1` green (add `-Format` first if it complains)
+- **…and green on the tree you are about to commit.** A gate result describes the
+  tree as it was when the gate ran; every edit after it invalidates the result.
+  This is not hypothetical: 67925c8 shipped a `rpc_test.v` that did not compile,
+  because a green gate run from before the last edit was reported afterwards.
+- **`build.ps1` cannot catch a broken test.** It compiles `.`, and `.` excludes
+  `_test.v`, so a test file can be broken while the build is green. Only
+  `test.ps1` sees it.
 - New public API has a test in the same commit
 - A `// COMPAT(x)` marker on anything with an upstream replacement coming
 - A `docs/ADR/` entry for a decision that would be expensive to reverse
