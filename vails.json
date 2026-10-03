@@ -25,6 +25,35 @@
 			"platforms": []
 		},
 		{
+			"id": "fluxget-control",
+			"_comment": "Row operations. A SEPARATE capability from fluxget-core on purpose: the grant is the security boundary, and 'can pause a download' is a smaller promise than 'can add one'. A script injected into the window can do exactly what this list says and nothing else.",
+			"windows": ["main"],
+			"commands": [
+				"fluxget.pause",
+				"fluxget.resume",
+				"fluxget.remove",
+				"fluxget.retry",
+				"fluxget.move",
+				"fluxget.pause_all",
+				"fluxget.resume_all",
+				"fluxget.forget_all",
+				"fluxget.set_item_options"
+			],
+			"asset_roots": ["frontend"],
+			"platforms": []
+		},
+		{
+			"id": "fluxget-settings",
+			"_comment": "Reading and writing preferences. Split out because it is the only capability that changes how EVERY future download behaves, and because a settings write is the one control command that reaches outside the queue.",
+			"windows": ["main"],
+			"commands": [
+				"fluxget.get_settings",
+				"fluxget.set_settings"
+			],
+			"asset_roots": ["frontend"],
+			"platforms": []
+		},
+		{
 			"id": "native-dialogs",
 			"windows": ["main"],
 			"commands": ["dialog.open", "dialog.save", "dialog.message"],

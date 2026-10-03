@@ -207,6 +207,69 @@ pub fn (mut e Engine) resume_all() !string {
 	return e.client.resume_all()
 }
 
+// retry re-queues a finished, failed or removed download from the URI it came
+// from, and answers with the NEW gid.
+//
+// `remembered` is the URI list Fluxget was given when it added this download. It
+// is a parameter rather than something the Engine looks up because the Engine is a
+// stateless facade over aria2 and this is knowledge aria2 no longer has - see
+// below.
+//
+// WHY THE CALLER HAS TO SUPPLY THE SOURCE
+//
+// Measured against aria2c 1.37.0 on this machine:
+//
+//   * a WAITING download   -> aria2.getUris works and returns the URIs
+//   * a download in ERROR   -> aria2.getUris answers "No URI data is available
+//                              for GID#..." (a JSON-RPC error, not an empty list)
+//   * after aria2.remove    -> even tellStatus answers "GID ... is not found"
+//
+// So the one case retry exists for - a download that failed - is exactly the case
+// where the engine can no longer say where it came from. Fluxget asked for those
+// URIs, so Fluxget is the only party that still knows. That is why `remembered`
+// exists, and why the fake transport (which happily answered getUris for a failed
+// download) hid the problem until this was checked against the real thing.
+//
+// The order of the four steps is the design:
+//
+//  1. Refuse anything that is not terminal. A paused download has a "resume"
+//     button, and re-adding it while aria2 still holds it produces two downloads
+//     fighting over one control file.
+//  2. Read the directory BEFORE anything is discarded. Once the record is gone the
+//     destination is gone with it, and a retry that lands somewhere else leaves
+//     the old copy on disk.
+//  3. Take the source from aria2 when it has one, else from `remembered`. aria2
+//     first because it is authoritative - it knows about a download that arrived
+//     from a session file rather than from us.
+//  4. Discard the record, then add. The other way round fails with "GID#... is
+//     not unique".
+pub fn (mut e Engine) retry(gid string, remembered []string) !string {
+	// V will not assign an immutable parameter's value into a mutable local, and
+	// `mut remembered := remembered` is not accepted either - a parameter is
+	// already a copy, so the honest spelling is to build a new list.
+	st := e.client.tell_status(gid, [])!
+	if st.status != 'complete' && st.status != 'error' && st.status != 'removed' {
+		return error('nothing to retry: ${gid} is ${st.status}, not finished or failed - resume it instead')
+	}
+
+	mut uris := e.client.uris(gid) or { remembered.clone() }
+	if uris.len == 0 && remembered.len > 0 {
+		uris = remembered.clone()
+	}
+	if uris.len == 0 {
+		// Say WHY, and what to do about it. The remedy is to add the source again,
+		// and the source is the .torrent file - which Fluxget never received
+		// because aria2 was handed it as bytes, not as an address.
+		return error('nothing to retry: ${gid} has no source we can re-add (a .torrent added from a file has no address) - add it again')
+	}
+
+	e.client.remove_result(gid)!
+	return e.add(AddRequest{
+		uris: uris
+		dir:  st.dir
+	})
+}
+
 // move reorders the queue. `how` is aria2's keyword string, so the three
 // constants are spelled here rather than passed as literals from the frontend.
 pub const pos_set = 'POS_SET'

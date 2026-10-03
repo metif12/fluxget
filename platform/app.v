@@ -28,6 +28,7 @@ module platform
 import aria2ctl
 import core
 import engine
+import store
 import json2
 import os
 import rpc
@@ -49,6 +50,19 @@ pub mut:
 	state &core.State
 	// dev mirrors Spec.dev, so health can say which transport it is on.
 	dev bool
+	// settings is the user's preferences. It is a VALUE and not a pointer on
+	// purpose: unlike the engine, it has no identity that other things hold, it
+	// is small, and copying it into a closure is a feature - a handler that
+	// mutates its copy cannot corrupt what the next tick reads.
+	settings store.Settings
+	// settings_path is where the document lives, resolved ONCE at startup.
+	// Resolving per write would mean a settings file that moves if %APPDATA%
+	// changes between two saves, which is a bug nobody would believe.
+	settings_path string
+	// settings_notes is what loading said: corrections applied, or a file that
+	// could not be read. Kept so the UI can show it once instead of silently
+	// holding different values than the user's file.
+	settings_notes []string
 }
 
 // new_app builds the application. It starts nothing and opens nothing: the
@@ -78,9 +92,19 @@ pub fn new_app(root string, dev bool, probe_url string) &App {
 			c.aria2_path = p
 		}
 	}
+	// The settings document is read HERE, at construction, and not in
+	// window_ready: a corrupt file must not be able to delay the window, and a
+	// slow disk must not either. Loading is one small read; if it fails, defaults
+	// plus a note is a working app, and the note is in the UI.
+	settings_path := store.default_path()
+	loaded, notes := store.load(settings_path)
+
 	mut app := &App{
-		state: core.new_state(c)
-		dev:   dev
+		state:          core.new_state(c)
+		dev:            dev
+		settings:       loaded
+		settings_path:  settings_path
+		settings_notes: notes
 	}
 	return app
 }
@@ -97,6 +121,25 @@ pub fn new_app(root string, dev bool, probe_url string) &App {
 // never binds costs a short pause and then a tick that keeps reporting
 // `starting` - not a frozen window.
 pub fn (mut app App) window_ready() {
+	// Two steps, and the split is load-bearing rather than tidy.
+	//
+	// step 1 starts the engine and seeds the probe. step 2 pushes the settings.
+	// They are separate calls because each takes the state lock itself, and the
+	// earlier version of this had both inside ONE lock scope: apply_settings ->
+	// push_settings locks again, and a plain mutex locked twice from the same
+	// thread never comes back. The window did not crash - it stopped answering,
+	// so the symptom was a window that paints and then ignores every key, and a
+	// screenshot tool that hangs waiting for it. "Hangs" is the worst shape of
+	// regression: nothing in the log says deadlock.
+	//
+	// So: no function that locks may call another function that locks. The rule is
+	// now written down here because it is invisible until it is fatal.
+	app.window_ready_start()
+	app.apply_settings()
+}
+
+// window_ready_start is the half that needs the lock.
+fn (mut app App) window_ready_start() {
 	app.state.lock()
 	defer {
 		app.state.unlock()
@@ -495,6 +538,10 @@ pub fn (mut app App) add_json(params string) !string {
 	// those errors are the user's answer and they travel as a rejection, not as
 	// a silent empty gid.
 	gid := app.state.eng.add(req) or { return error('fluxget.add: ' + err.msg()) }
+	// Remembered so a download that later fails can be retried: aria2 forgets the
+	// source of a failed download, and Fluxget is the only party that still knows
+	// it (core.State.added_uris).
+	app.state.remember(gid, req.uris)
 	app.state.notices.push(core.Notice{
 		kind: core.notice_added
 		text: 'Added ' + (if p.uris.len > 0 { p.uris[0] } else { gid })

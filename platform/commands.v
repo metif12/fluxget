@@ -180,5 +180,51 @@ pub fn default_backend(app &App) map[string]Handler {
 	backend[app_name + '.add'] = fn [mut a] (params string) !string {
 		return a.add_json(params)
 	}
+
+	// Phase 3: the row operations. Every one of these is a closure over the App
+	// for the same reason the three above are - they need the engine and they
+	// mutate state - and the `mut a` capture is load-bearing in each.
+	//
+	// They are separate commands rather than one `fluxget.act` with an action
+	// field because the grant is the security boundary: a window script that can
+	// pause a download need not be able to delete one, and a capability list that
+	// reads "fluxget.control" cannot express that.
+	backend[app_name + '.pause'] = fn [mut a] (params string) !string {
+		return a.pause_json(params)
+	}
+	backend[app_name + '.resume'] = fn [mut a] (params string) !string {
+		return a.resume_json(params)
+	}
+	backend[app_name + '.remove'] = fn [mut a] (params string) !string {
+		return a.remove_json(params)
+	}
+	backend[app_name + '.retry'] = fn [mut a] (params string) !string {
+		return a.retry_json(params)
+	}
+	backend[app_name + '.move'] = fn [mut a] (params string) !string {
+		return a.move_json(params)
+	}
+	backend[app_name + '.pause_all'] = fn [mut a] (params string) !string {
+		return a.pause_all_json(params)
+	}
+	backend[app_name + '.resume_all'] = fn [mut a] (params string) !string {
+		return a.resume_all_json(params)
+	}
+	backend[app_name + '.forget_all'] = fn [mut a] (params string) !string {
+		return a.forget_all_json(params)
+	}
+	backend[app_name + '.set_item_options'] = fn [mut a] (params string) !string {
+		return a.set_item_options_json(params)
+	}
+
+	// Phase 3: settings. get_settings needs no lock and mutates nothing, so it
+	// takes the App by value - a read that cannot change what it reads is worth
+	// saying in the signature.
+	backend[app_name + '.get_settings'] = fn [a] (_ string) !string {
+		return a.settings_json('')
+	}
+	backend[app_name + '.set_settings'] = fn [mut a] (params string) !string {
+		return a.set_settings_json(params)
+	}
 	return backend
 }

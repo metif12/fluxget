@@ -355,3 +355,90 @@ fn test_the_options_helper_agrees_with_what_is_on_the_wire() {
 	assert decoded['select-file']! == json2.Any('1')
 	assert decoded['pause']! == json2.Any('true')
 }
+
+// ---- retry --------------------------------------------------------------
+
+// The full sequence, with aria2 still holding the source: read the status, read
+// the source, discard the record, then add. Re-adding first fails with
+// "GID#... is not unique"; discarding first loses the destination.
+fn test_retry_reads_the_source_discards_the_record_then_readds() {
+	f := rpc.new_fake([
+		rpc.ok_raw('{"gid":"old","status":"error","dir":"D:/downloads"}'),
+		rpc.ok_raw('[{"uri":"https://example.com/a.bin"}]'),
+		rpc.ok('"old"'),
+		rpc.ok('"fresh"'),
+	])
+	mut e := eng(f)
+	got := e.retry('old', ['https://example.com/a.bin']) or {
+		assert false, err.msg()
+		return
+	}
+	assert f.count() == 4, 'four calls expected, got ${f.count()}'
+	assert f.method_of(0) == 'aria2.tellStatus', f.method_of(0)
+	assert f.method_of(1) == 'aria2.getUris', f.method_of(1)
+	assert f.method_of(2) == 'aria2.removeDownloadResult', f.method_of(2)
+	assert f.method_of(3) == 'aria2.addUri', f.method_of(3)
+	// A new gid, always. Wrapping this as "the same download" would leave the UI
+	// holding a handle to a gid the engine has already forgotten.
+	assert got == 'fresh', got
+}
+
+// A retry that lands somewhere else would leave the old copy on disk and the new
+// one somewhere the user did not choose.
+fn test_retry_keeps_the_directory_the_download_came_from() {
+	f := rpc.new_fake([
+		rpc.ok_raw('{"gid":"old","status":"error","dir":"D:/downloads/movies"}'),
+		rpc.ok_raw('[{"uri":"https://example.com/a.mkv"}]'),
+		rpc.ok('"old"'),
+		rpc.ok('"fresh"'),
+	])
+	mut e := eng(f)
+	e.retry('old', ['https://example.com/a.mkv']) or { assert false, err.msg() }
+	assert f.params_of(3).contains('movies'), f.params_of(3)
+}
+
+// Mirrors survive the retry: a download that failed on one mirror should come back
+// with all of them, or a retry is a worse version of the original attempt.
+fn test_retry_readds_every_mirror() {
+	f := rpc.new_fake([
+		rpc.ok_raw('{"gid":"old","status":"error","dir":"D:/x"}'),
+		rpc.ok_raw('[{"uri":"https://a/1.bin"},{"uri":"https://b/1.bin"}]'),
+		rpc.ok('"old"'),
+		rpc.ok('"fresh"'),
+	])
+	mut e := eng(f)
+	e.retry('old', ['https://example.com/a.mkv']) or { assert false, err.msg() }
+	params := f.params_of(3)
+	assert params.contains('https://a/1.bin') && params.contains('https://b/1.bin'), params
+}
+
+// A download added from .torrent bytes has no URI. The refusal has to come BEFORE
+// the record is discarded, or the retry destroys the entry it cannot rebuild.
+fn test_retry_refuses_when_there_is_no_uri_and_discards_nothing() {
+	f := rpc.new_fake([
+		rpc.ok_raw('{"gid":"old","status":"error","dir":"D:/x"}'),
+		rpc.ok_raw('[]'),
+	])
+	mut e := eng(f)
+	e.retry('old', []) or {
+		assert err.msg().contains('nothing to retry'), err.msg()
+		return
+	}
+	assert false, 'a download with no URI must not be retried'
+	assert f.count() == 2, 'the record must not be discarded: ${f.count()} calls'
+}
+
+// The message has to say what the user can DO, not just that it failed. The answer
+// is "add the .torrent again", and that is what the text says.
+fn test_the_no_uri_refusal_names_the_way_out() {
+	f := rpc.new_fake([
+		rpc.ok_raw('{"gid":"old","status":"error","dir":"D:/x"}'),
+		rpc.ok_raw('[]'),
+	])
+	mut e := eng(f)
+	e.retry('old', []) or {
+		assert err.msg().contains('.torrent'), 'the message should point at the cause: ${err.msg()}'
+		return
+	}
+	assert false, 'expected a refusal'
+}

@@ -139,6 +139,17 @@ fn (f &Fake) request_json(index int) map[string]json2.Any {
 	return opt_map(any) or { map[string]json2.Any{} }
 }
 
+// count is how many requests arrived.
+//
+// It exists because "the request was refused" and "the request was never sent" are
+// different claims, and only this one proves the second. A test that asserts a
+// rejection without counting requests has proved nothing about ordering: the
+// handler may have called aria2 first and validated afterwards, which still looks
+// correct right up until the point where aria2 acts on it.
+pub fn (f &Fake) count() int {
+	return f.requests.len
+}
+
 // method_of pulls the `method` member out of a recorded request body.
 pub fn (f &Fake) method_of(index int) string {
 	m := f.request_json(index)

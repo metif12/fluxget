@@ -53,6 +53,38 @@ pub fn app_manifest() services.Service {
 				'One poll of the engine: the queue, global stats, queued notices and the log tail. The UI heartbeat.'),
 			cmd(app_name + '.add', 'AddParams', 'string',
 				'Add a download by URI, magnet or .torrent. Returns the new GID.'),
+
+			// ---- Phase 3: the row operations.
+			//
+			// One command per action, on purpose. The grant list in vails.json is
+			// the security boundary, and "fluxget.control" as a single grant cannot
+			// say that pausing a download is allowed while deleting one is not. Each
+			// command is also its own .d.ts signature, so the frontend gets a typed
+			// call rather than a stringly-typed dispatch table.
+			cmd(app_name + '.pause', 'GidParams', 'string',
+				'Pause one download by GID.'),
+			cmd(app_name + '.resume', 'GidParams', 'string',
+				'Resume one paused download by GID.'),
+			cmd(app_name + '.remove', 'RemoveParams', 'string',
+				'Remove one download from the queue, and by default discard its record too.'),
+			cmd(app_name + '.retry', 'GidParams', 'string',
+				'Re-queue a finished, failed or removed download from its URI. Returns the NEW GID.'),
+			cmd(app_name + '.move', 'MoveParams', 'number',
+				'Move a download within the queue by a number of places.'),
+			cmd(app_name + '.pause_all', services.no_params, 'string',
+				'Pause every active download.'),
+			cmd(app_name + '.resume_all', services.no_params, 'string',
+				'Resume every paused download.'),
+			cmd(app_name + '.forget_all', services.no_params, 'string',
+				'Clear the finished and failed history.'),
+			cmd(app_name + '.set_item_options', 'ItemOptionsParams', 'map',
+				'Set per-download aria2 options. Answers with the options aria2 refused.'),
+
+			// ---- Phase 3: settings.
+			cmd(app_name + '.get_settings', services.no_params, 'SettingsView',
+				'The settings document, where it lives, and what loading said about it.'),
+			cmd(app_name + '.set_settings', 'Settings', 'SettingsView',
+				'Clamp, apply to the engine, then persist. Answers with what is actually in force.'),
 		]
 		ts_types: app_ts_types()
 	}
@@ -150,6 +182,51 @@ fn app_ts_types() []string {
 		'\t\tdir: string;',
 		'\t\tout: string;',
 		'\t\tpaused: boolean;',
+		'\t}',
+		// Phase 3. One interface per request body, and they are separate rather
+		// than one ControlParams with optional everything: an interface where
+		// every field is optional tells the frontend nothing about which fields a
+		// given command actually reads, and the whole point of the .d.ts is that
+		// the call site is checked.
+		'\texport interface GidParams {',
+		'\t\tgid: string;',
+		'\t}',
+		'\texport interface MoveParams {',
+		'\t\tgid: string;',
+		'\t\tdelta: number;',
+		'\t}',
+		'\texport interface RemoveParams {',
+		'\t\tgid: string;',
+		'\t\tkeep_record: boolean;',
+		'\t}',
+		'\texport interface ItemOptionsParams {',
+		'\t\tgid: string;',
+		'\t\toptions: {[key: string]: string};',
+		'\t}',
+		// Settings is the wire shape of store.Settings, and it is spelled out
+		// here rather than generated, for the same reason every other interface
+		// is: a .d.ts that codegen produces from a V struct would drift silently,
+		// and test_dts_text_agrees_with_the_wire_format compares this text to the
+		// struct.
+		'\texport interface Settings {',
+		'\t\tmax_concurrent: number;',
+		'\t\tmax_per_server: number;',
+		'\t\tdownload_limit: number;',
+		'\t\tupload_limit: number;',
+		'\t\tsplit: number;',
+		'\t\tmin_split_size: number;',
+		'\t\tdir: string;',
+		'\t\tbt_enabled: boolean;',
+		'\t\tseed_ratio: string;',
+		'\t\tseed_time: string;',
+		'\t\tsave_session: boolean;',
+		'\t}',
+		// SettingsView nests the document under `settings` so a future top-level
+		// field - a schema version, say - cannot collide with a setting.
+		'\texport interface SettingsView {',
+		'\t\tsettings: Settings;',
+		'\t\tpath: string;',
+		'\t\tnotes: string[];',
 		'\t}',
 	]
 }

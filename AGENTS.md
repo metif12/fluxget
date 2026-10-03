@@ -218,6 +218,18 @@ spawned worker is a platform violation. So:
   never touch `webview.Ctx.emit`.
 - A handler may not `time.sleep`. A scheduled restart records *when* it is due
   and the tick performs it (ADR-0002).
+- **A plain mutex locked twice from one thread deadlocks, and on the webview's
+  main thread it presents as an unresponsive window rather than an error.** Phase 3
+  shipped exactly this: `window_ready` held `app.state.lock()` and called
+  `apply_settings()`, which locks again through `push_settings`. The app did not
+  crash — it painted and then ignored every key, and `capture-window.ps1` hung
+  waiting for a frame that would never come. The rule: **no function that takes
+  the state lock may call another that takes it.** Take two lock scopes in
+  sequence, never nested.
+  `test_applying_settings_at_startup_does_not_deadlock` cannot assert a deadlock —
+  it can only hang — which is exactly why it is worth having.
+- Two phases of `sync.new_mutex` are not a thing. If a function needs a lock twice,
+  it needs a second mutex and a comment saying what each guards.
 
 The reasoning, and the two designs that are ruled out because of this, are in
 [ADR-0002](docs/ADR/0002-engine-lifecycle-and-tick-not-push.md).

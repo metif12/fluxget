@@ -706,3 +706,81 @@ fn test_endpoint_default_path_is_the_documented_one() {
 	assert default_path == '/jsonrpc'
 	assert default_port == 6800
 }
+
+// ---- getUris: the source of a download ---------------------------------
+
+// Captured shape from aria2 1.37.0. `uri` is the field name, and it is the only
+// way a failed download can be retried - which is why this decoder exists rather
+// than a command handler re-parsing the raw JSON.
+const fixture_uris = '[{"uri":"https://example.com/a.bin","status":"used"},{"uri":"https://mirror.example.com/a.bin","status":"waiting"}]'
+
+fn test_uris_are_decoded_from_the_uri_field() {
+	f := new_fake([ok_raw(fixture_uris)])
+	mut c := f.client('s')
+	got := c.uris('2089b05ecca3d829') or {
+		assert false, err.msg()
+		return
+	}
+	assert got.len == 2, got.len.str()
+	assert got[0] == 'https://example.com/a.bin', got[0]
+	assert got[1] == 'https://mirror.example.com/a.bin', got[1]
+	assert f.method_of(0) == 'aria2.getUris', f.method_of(0)
+}
+
+// aria2 reports every mirror separately, and re-adding the same URI twice is how a
+// mirror list becomes a self-inflicted stampede on one host.
+fn test_duplicate_uris_are_collapsed() {
+	f := new_fake([ok_raw('[{"uri":"https://a/b"},{"uri":"https://a/b"},{"uri":"https://a/c"}]')])
+	mut c := f.client('s')
+	got := c.uris('g') or {
+		assert false, err.msg()
+		return
+	}
+	assert got.len == 2, 'duplicates must collapse: ${got}'
+	assert got[0] == 'https://a/b' && got[1] == 'https://a/c', '${got}'
+}
+
+// A torrent added from .torrent bytes has no address to re-add. Reporting an empty
+// list is how the caller learns to say "this cannot be retried" instead of
+// attempting an add with nothing to add.
+fn test_an_entry_with_no_uri_is_dropped_rather_than_reported_as_empty() {
+	f := new_fake([ok_raw('[{"uri":""},{"status":"used"}]')])
+	mut c := f.client('s')
+	assert (c.uris('g') or { []string{} }).len == 0
+}
+
+// Empty is a legitimate answer, not an error.
+fn test_no_uris_is_an_empty_list_not_an_error() {
+	f := new_fake([ok_raw('[]')])
+	mut c := f.client('s')
+	got := c.uris('g') or {
+		assert false, 'an empty array must not be an error'
+		return
+	}
+	assert got.len == 0
+}
+
+// ---- refused options ----------------------------------------------------
+
+// The most misreadable thing in aria2's API: changeOption and changeGlobalOption
+// answer with the options they would NOT set. A caller that ignores this renders a
+// limit as saved while the engine runs with a different one.
+fn test_refused_options_are_decoded_from_the_answer() {
+	got := refused_options('{"split":"Must be between 1 and 16"}')
+	assert got.len == 1, '${got}'
+	assert got['split'] == 'Must be between 1 and 16', '${got}'
+}
+
+fn test_nothing_refused_is_an_empty_map_not_a_json_object() {
+	assert refused_options('{}').len == 0, 'aria2 answers {} when nothing was refused'
+	assert refused_options('').len == 0, 'an empty answer is nothing refused'
+	assert refused_options('   ').len == 0
+}
+
+// Unparseable is treated as "nothing refused" on purpose: a malformed refusal is
+// not evidence that the settings failed, and the settings path reports the
+// engine's own echo separately so a real mismatch still surfaces.
+fn test_an_unparseable_refusal_is_treated_as_nothing_refused() {
+	assert refused_options('not json').len == 0
+	assert refused_options('[1,2,3]').len == 0, 'an array is not a refusal map'
+}

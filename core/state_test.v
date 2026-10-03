@@ -184,3 +184,51 @@ fn test_a_missing_binary_becomes_a_notice_not_a_panic() {
 	// aria2c is installed: then this test is vacuous here and the real run in
 	// tests/e2e_windows covers the other branch.
 }
+
+// ---- remembering what we were asked to download -------------------------
+
+// aria2 forgets the source of a failed download - measured against 1.37.0,
+// where getUris answers "No URI data is available for GID#..." - so Fluxget is the
+// only party that still knows what a gid was added from. This is that memory.
+
+fn test_a_remembered_source_comes_back() {
+	mut s := new_state(conf())
+	s.remember('abc', ['https://example.com/a.bin'])
+	assert s.remembered('abc') == ['https://example.com/a.bin'], '${s.remembered('abc')}'
+}
+
+// Mirrors are the point: a download with four sources must come back with all
+// four, or a retry is a worse version of the original attempt.
+fn test_every_mirror_is_remembered() {
+	mut s := new_state(conf())
+	s.remember('abc', ['https://a/1', 'https://b/1', 'https://c/1'])
+	assert s.remembered('abc').len == 3, '${s.remembered('abc')}'
+}
+
+// The stored list must be a COPY. `add` may keep or mutate the slice it was
+// handed, and a map that changed under a later retry is a very hard bug.
+fn test_the_stored_list_is_a_copy_not_the_callers_slice() {
+	mut s := new_state(conf())
+	mut uris := ['https://example.com/a.bin']
+	s.remember('abc', uris)
+	uris << 'https://added-later/evil.bin'
+	assert s.remembered('abc').len == 1, 'the caller mutated our memory: ${s.remembered('abc')}'
+}
+
+// Nothing is a normal answer, not an error: a download restored from an aria2
+// session file never came through add, so retry has to cope with not knowing.
+fn test_an_unknown_gid_remembers_nothing() {
+	mut s := new_state(conf())
+	assert s.remembered('never-added').len == 0
+	assert s.remembered('') == []string{}
+}
+
+// And an empty gid or an empty list is not worth storing, because an entry that
+// says nothing is worse than no entry.
+fn test_nothing_worth_remembering_is_not_stored() {
+	mut s := new_state(conf())
+	s.remember('', ['https://example.com/a.bin'])
+	s.remember('abc', []string{})
+	assert s.remembered('').len == 0
+	assert s.remembered('abc').len == 0
+}

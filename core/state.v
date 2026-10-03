@@ -107,6 +107,20 @@ pub mut:
 	// probe_pending is set when a probe download still has to be handed to the
 	// engine. See seed_probe.
 	probe_pending bool
+	// added_uris is what Fluxget was asked to download, by gid.
+	//
+	// It exists because aria2 forgets. Measured against aria2c 1.37.0: a waiting
+	// download answers aria2.getUris, a download in ERROR answers "No URI data is
+	// available for GID#...", and after a remove even tellStatus says the gid is
+	// unknown. So for the one case a retry exists for - a download that failed -
+	// the engine cannot say where it came from, and Fluxget is the only party that
+	// still knows.
+	//
+	// It is IN MEMORY and deliberately not persisted: a download restored from an
+	// aria2 session file never passed through here, so a persisted map would imply
+	// a completeness it does not have. Retry falls back to aria2, and says so when
+	// neither source knows.
+	added_uris map[string][]string
 }
 
 // new_state builds the state. It creates no directories, starts no process and
@@ -128,11 +142,49 @@ pub fn new_state(conf Config) &State {
 		client:     c
 		eng:        engine.new(c)
 		seen:       map[string]Seen{}
+		added_uris: map[string][]string{}
 		guard:      sync.new_mutex()
 		started_ms: now_ms()
 	}
 	s.probe_pending = conf.probe_url != ''
 	return s
+}
+
+// use_client replaces the RPC client on both the State and its Engine.
+//
+// It exists for tests, and it is a method rather than two field assignments
+// because the client genuinely lives in TWO places: State keeps its own copy for
+// the readiness probe and for options, and Engine holds another. Setting one and
+// not the other yields a State whose health check talks to a different engine
+// than its commands do - which is the sort of defect that only shows up against a
+// real daemon.
+//
+// It is the same injection seam rpc.Fake already relies on, one level up: AGENTS
+// section 4 asks for pure tests, and "pure" has to include not reaching a socket.
+pub fn (mut s State) use_client(c rpc.Client) {
+	s.client = c
+	s.eng.client = c
+}
+
+// remember records the source of a download Fluxget added, so retry has
+// something to re-add from after aria2 has forgotten it (see added_uris).
+//
+// A copy of the slice is stored, not the caller's: `add` may keep or mutate the
+// list it was handed, and a map that changed under a later retry would be a very
+// hard bug to find.
+pub fn (mut s State) remember(gid string, uris []string) {
+	if gid == '' || uris.len == 0 {
+		return
+	}
+	s.added_uris[gid] = uris.clone()
+}
+
+// remembered is what we were told to download, or nothing.
+//
+// Nothing rather than an error: "we do not know" is a normal answer here, because a
+// download restored from a session file never came through add.
+pub fn (s &State) remembered(gid string) []string {
+	return s.added_uris[gid] or { []string{} }
 }
 
 // conf_port_host is the loopback host the client dials.
@@ -337,7 +389,7 @@ pub fn (mut s State) seed_probe() {
 		return
 	}
 	s.probe_pending = false
-	s.eng.add(engine.AddRequest{
+	gid := s.eng.add(engine.AddRequest{
 		uris: [s.conf.probe_url]
 	}) or {
 		s.notices.push(Notice{
@@ -346,6 +398,9 @@ pub fn (mut s State) seed_probe() {
 		})
 		return
 	}
+	// Remembered like any other add, so a probe that fails can be retried the same
+	// way a user's download can.
+	s.remember(gid, [s.conf.probe_url])
 	// No "added" notice here on purpose. core/notice.v's diff announces every gid
 	// it has not seen before, and a download added through the engine is exactly
 	// that - so pushing one as well toasted "Added" twice for a single download.

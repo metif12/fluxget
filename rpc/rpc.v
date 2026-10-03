@@ -726,6 +726,57 @@ pub fn (mut c Client) get_uris(gid string) !string {
 	return c.call('aria2.getUris', [json2.Any(gid)])!.str()
 }
 
+// uris is get_uris decoded, and it exists because `retry` needs the SOURCE of a
+// download, not a JSON string to re-parse in a command handler.
+//
+// Two things get dropped, and both would produce a retry that fails for a reason
+// the user cannot act on:
+//
+//   * an entry with no `uri`, which aria2 sends for a torrent added from bytes
+//     rather than from a magnet - there is no address to re-add, so pretending
+//     otherwise means a retry that silently does nothing;
+//   * a duplicate, because aria2 reports every mirror separately and re-adding
+//     the same URI twice is how a mirror list turns into a self-inflicted
+//     stampede on one host.
+//
+// An empty result is a legitimate answer, not an error: it is how the caller
+// learns that this download cannot be retried and should say so.
+pub fn (mut c Client) uris(gid string) ![]string {
+	arr := opt_arr(c.call('aria2.getUris', [json2.Any(gid)])!) or {
+		return error('rpc: aria2.getUris did not return an array')
+	}
+	mut out := []string{}
+	for e in arr {
+		obj := opt_map(e) or { continue }
+		u := str_of(obj, 'uri')
+		if u == '' || u in out {
+			continue
+		}
+		out << u
+	}
+	return out
+}
+
+// refused_options decodes what changeGlobalOption and changeOption answer with.
+//
+// Both return an OBJECT whose keys are the options aria2 would NOT set, with
+// aria2's own reason as the value. That is the opposite of what a function called
+// `change_...` returning a success string implies, and it is the single most
+// misreadable thing in aria2's API: a caller that ignores it renders a limit as
+// saved while the engine is running with a different one.
+//
+// An empty answer means nothing was refused. Anything unparseable is treated as
+// "nothing refused" too, deliberately: a malformed refusal is not a reason to
+// tell a user their settings failed when we do not know that, and the settings
+// path reports the engine's own echo separately (read_back_settings) so a real
+// mismatch still shows up.
+pub fn refused_options(raw string) map[string]string {
+	if raw.trim_space() == '' {
+		return map[string]string{}
+	}
+	return json2.decode[map[string]string](raw) or { return map[string]string{} }
+}
+
 // save_session flushes the queue to the --save-session file. The supervisor
 // calls this before shutdown, so a crash costs at most one interval.
 pub fn (mut c Client) save_session() !string {
