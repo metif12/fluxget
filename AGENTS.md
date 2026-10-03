@@ -217,7 +217,37 @@ spawned worker is a platform violation. So:
 The reasoning, and the two designs that are ruled out because of this, are in
 [ADR-0002](docs/ADR/0002-engine-lifecycle-and-tick-not-push.md).
 
-## 7. Definition of done
+## 7. Network use
+
+This machine's bandwidth is not free and not unlimited. Treat the network as
+something to spend deliberately, not something to reach for by default.
+
+**The gate is already network-free, and must stay that way.** `test.ps1` and
+`build.ps1` both call `sync-vails.ps1 -Probe`, which greps the vendored tree and
+touches no network. If a change ever makes the gate fetch something, that is a
+regression in this section even when it is faster.
+
+- **`.\scripts\sync-vails.ps1` with no arguments is the only thing that moves the
+  pin**, and it runs `git fetch origin/main` plus a full gate. Use it when the pin
+  genuinely needs to move, or when investigating a break (§3). Do not run it as a
+  reflex before unrelated work — for a routine contract check, `-Probe` is enough
+  and costs nothing.
+- **Do not fetch pages, docs or search the web unless asked.** Prefer what is
+  already on disk: `vendor/vails` is a complete checkout of the framework, and the
+  vails repo's own `docs/` and `ROADMAP` answer most "what does upstream do"
+  questions without a request.
+- **Do not download test data at run time by default.** Anything that needs a
+  file from the internet is opt-in behind an explicit switch or environment
+  variable, and it is small: the e2e probe is 1 MiB and that is the ceiling.
+- **`scripts/fetch-aria2.ps1` is the one unavoidable download** — 2.4 MB, once,
+  a GPL binary that is never committed. It is a build prerequisite, not a test
+  fixture, and re-running it needs `-Force`.
+
+Phase 4's `fluxget bench` is where this is easiest to forget: a benchmark that
+downloads a 1 GB file to look impressive is exactly the wrong thing to leave in a
+script. It measures what is on disk, or takes a URL the operator supplies.
+
+## 8. Definition of done
 
 - `.\scripts\test.ps1` green (add `-Format` first if it complains)
 - New public API has a test in the same commit

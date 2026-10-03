@@ -147,6 +147,9 @@ already.
 - Phase 2 is the biggest single chunk of work in the plan. It is capped
   deliberately: no component library, hand-written CSS on the existing token
   file, one chart type.
+- `fluxget bench` must not download anything by default. It measures a file on
+  disk, or one the operator names — not a 1 GB fetch to make the numbers look
+  good (AGENTS.md §7).
 
 ## Notes
 
