@@ -148,10 +148,10 @@ adopting the upstream service is a one-line change rather than a rewrite.
 | Capability | Today | vails, when it lands | Switch |
 |---|---|---|---|
 | Open a folder / file | not yet (`shell/`, only if vails does not ship `opener` first) | `opener` (S1 wave 2) | `platform/natives.v`, by grant |
-| Finish notifications | in-app toast from the notice queue | `notification` | same |
+| Finish notifications | in-app toast from the notice queue | **withdrawn upstream** | nothing to switch to; we own it |
 | Copy a magnet link | not yet | `clipboard` | same |
 | Single instance | Control API port as the lock (Phase 6) | `single-instance` (S2) | same |
-| Persistence | session file via aria2; no `store/` yet | `store` (S2) | same |
+| Persistence | session file via aria2; no `store/` yet | **withdrawn upstream** — `state/store.v` was removed in `e4e99ad` | nothing to switch to; Phase 3 writes our own |
 | Window geometry | not yet | `window-state` | same |
 | Frontend `.d.ts` | `platform/host.v: dts_text`, from the manifest | `$for` reflection (vails Phase 7) | delete `dts_text` |
 | Tray icon | **not implemented** | `tray` | documented, not built |

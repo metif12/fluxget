@@ -86,11 +86,37 @@ $script:ContractPatterns = [ordered]@{
 }
 
 function Get-Surface {
-    <# Every `pub` line in the vails tree at a given revision. #>
+    <#
+    Every `pub` declaration in the vails tree at a given revision, keyed by FILE
+    PATH and declaration text - and deliberately by neither LINE NUMBER nor the
+    revision's own SHA.
+
+    `git grep -n <rev>` emits `<sha>:<path>:<line>:<text>`, and both prefixes have
+    to go before anything is compared:
+
+      - the LINE NUMBER, so a declaration that merely moved is not reported as
+        one removal plus one addition;
+      - the SHA, or the two sides of the comparison are prefixed differently and
+        therefore share nothing. That is what produced "246 added, 246 removed"
+        for a commit that added one example and a docs file: every declaration
+        was on both lists at once.
+
+    Leaving either in makes the drafted issue claim we lost ~246 symbols that are
+    all still present. The revision is resolved to a SHA first so the prefix
+    stripped is exactly the one git printed.
+    #>
     param([string]$Rev = 'HEAD')
-    $r = Invoke-Native -Command 'git' -Arguments @('-C', $vailsHome, 'grep', '-n', '-E', '^pub (fn|struct|type|const|mut)', $Rev, '--', '*.v')
+    $sha = (Invoke-Native -Command 'git' -Arguments @('-C', $vailsHome, 'rev-parse', $Rev)).Output[0]
+    if (-not $sha) { return @() }
+    $sha = $sha.Trim()
+    $r = Invoke-Native -Command 'git' -Arguments @('-C', $vailsHome, 'grep', '-n', '-E', '^pub (fn|struct|type|const|mut)', $sha, '--', '*.v')
     if ($r.Code -gt 1) { return @() }
-    return @($r.Output | ForEach-Object { $_.Trim() })
+    return @($r.Output | ForEach-Object {
+        $line = $_.Trim()
+        if ($line.StartsWith("$sha`:")) { $line = $line.Substring($sha.Length + 1) }
+        if ($line -match '^(.+?):(\d+):(.*)$') { return "$($Matches[1]):$($Matches[3])" }
+        return $line
+    })
 }
 
 function Test-Contract {
@@ -168,11 +194,29 @@ function Write-CompatReport {
     $r = Invoke-Native -Command 'git' -Arguments @('-C', $vailsHome, 'rev-parse', 'origin/main')
     $originSha = if ($r.Code -eq 0) { $r.Output[0].Trim() } else { '(no origin/main)' }
 
+    # TWO comparisons, because they answer different questions and only one of
+    # them is useful at any moment:
+    #
+    #   locked -> HEAD           what we are actually running against
+    #   locked -> origin/main    what we rejected, or what is coming
+    #
+    # After a rollback HEAD IS the locked revision, so the first comparison is
+    # 0/0 and says nothing - which is exactly when the second one matters most.
+    # Reporting only the first is how a rollback leaves you with no explanation
+    # of what you rolled back FROM.
     $surfaceLocked = if ($lock) { Get-Surface $lock.sha } else { @() }
     $surfaceHead = Get-Surface 'HEAD'
     $added = @($surfaceHead | Where-Object { $_ -notin $surfaceLocked })
     $removed = @($surfaceLocked | Where-Object { $_ -notin $surfaceHead })
     $missing = @(Test-Contract)
+
+    $upstreamAdded = @()
+    $upstreamRemoved = @()
+    if ($originSha -and $originSha -ne 'HEAD') {
+        $surfaceOrigin = Get-Surface $originSha
+        $upstreamAdded = @($surfaceOrigin | Where-Object { $_ -notin $surfaceLocked })
+        $upstreamRemoved = @($surfaceLocked | Where-Object { $_ -notin $surfaceOrigin })
+    }
 
     $log = @()
     $log += '# vails compatibility report'
@@ -196,30 +240,47 @@ function Write-CompatReport {
         foreach ($m in $missing) { $log += "- ``$m``" }
     }
     $log += ''
-    $log += ('## Public API surface: {0} added, {1} removed' -f $added.Count, $removed.Count)
+    $log += ('## Checked-out tree vs locked: {0} added, {1} removed' -f $added.Count, $removed.Count)
     $log += ''
     if ($added.Count -eq 0 -and $removed.Count -eq 0) {
-        $log += 'No change in the `pub` surface between the locked revision and HEAD.'
+        $log += 'No change in the `pub` surface between the locked revision and the checked-out tree.'
     } else {
-        if ($added.Count -gt 0) {
-            $log += '### Added'
+        foreach ($a in ($added | Sort-Object)) { $log += "- added ``$a``" }
+        foreach ($r2 in ($removed | Sort-Object)) { $log += "- removed ``$r2``" }
+    }
+    $log += ''
+    $log += ('## origin/main vs locked: {0} added, {1} removed' -f $upstreamAdded.Count, $upstreamRemoved.Count)
+    $log += ''
+    if ($upstreamAdded.Count -eq 0 -and $upstreamRemoved.Count -eq 0) {
+        $log += 'Upstream HEAD matches the locked revision on the `pub` surface.'
+    } else {
+        $log += 'What the newest upstream revision does to the surface. This is the comparison to read'
+        $log += 'when a run rolled back, because the checked-out tree is then the locked revision and'
+        $log += 'the section above is empty by construction.'
+        $log += ''
+        if ($upstreamRemoved.Count -gt 0) {
+            $log += '### Removed or renamed upstream'
             $log += ''
-            foreach ($a in ($added | Sort-Object)) { $log += "- ``$a``" }
+            foreach ($r2 in ($upstreamRemoved | Sort-Object)) { $log += "- ``$r2``" }
             $log += ''
         }
-        if ($removed.Count -gt 0) {
-            $log += '### Removed / renamed'
+        if ($upstreamAdded.Count -gt 0) {
+            $log += '### Added upstream'
             $log += ''
-            foreach ($r2 in ($removed | Sort-Object)) { $log += "- ``$r2``" }
+            foreach ($a in ($upstreamAdded | Sort-Object)) { $log += "- ``$a``" }
             $log += ''
         }
     }
     $log += '## Fluxget commits to vails'
     $log += ''
-    $log += 'Next in the vails plan: `notification`, `clipboard` (native half), `menu`, `tray`,'
-    $log += '`opener`, `window-state`, then S2 `single-instance` and `store`. Each already has a'
-    $log += '`// COMPAT(...)` marker in the Fluxget source; the ownership table lives in README.md'
-    $log += 'under "Feature ownership".'
+    $log += 'Listed in the vails plan: `clipboard` (native half), `menu`, `tray`, `opener`,'
+    $log += '`window-state`, then S2 `single-instance`. Each already has a `// COMPAT(...)` marker in'
+    $log += 'the Fluxget source; the ownership table lives in README.md under "Feature ownership".'
+    $log += ''
+    $log += 'Withdrawn upstream before Fluxget adopted them, so there is nothing to switch to and the'
+    $log += 'capability is ours to build: `notification` (`services/notification.v`) and the `store`'
+    $log += 'service (`state/store.v`). Both were in the plan and both are gone as of the revision'
+    $log += 'named in the `origin/main` section above.'
     $log += ''
     [System.IO.File]::WriteAllLines((Join-Path $docsCompat 'vails-compat.md'), $log, (New-Object System.Text.UTF8Encoding($false)))
     Write-Ok "wrote docs/compat/vails-compat.md ($($added.Count) added, $($removed.Count) removed, $($missing.Count) contract gaps)"
@@ -227,20 +288,36 @@ function Write-CompatReport {
     if ($missing.Count -eq 0 -and $added.Count -eq 0 -and $removed.Count -eq 0) { return }
 
     $iss = @()
-    $iss += '# Fluxget cannot build against the current vails HEAD'
+    # The title and the framing follow the CONTRACT, not the churn. On the first
+    # real run of this report the contract was intact (0 gaps) and the drafted
+    # issue still said "Fluxget cannot build" and "it is what broke", because
+    # that text was unconditional. What actually happened that day was upstream's
+    # own suite going red on a new example while our code compiled untouched -
+    # and that is a different, much smaller, much more actionable report.
+    if ($missing.Count -gt 0) {
+        $iss += '# Fluxget cannot build against the current vails HEAD'
+        $iss += ''
+        $iss += 'Fluxget treats vails as an unstable dependency: it vendors the framework as a git'
+        $iss += 'submodule and runs a machine-checked API contract before every build. The contract'
+        $iss += 'is the list of symbols the app imports, and it is what broke.'
+    } else {
+        $iss += '# Public API surface churn on vails HEAD (Fluxget contract intact)'
+        $iss += ''
+        $iss += '**Fluxget still builds and still passes its gate against this revision.** Every symbol'
+        $iss += 'it imports is present; this is the surface-diff report only, and it is filed because'
+        $iss += 'an unattended dependency that moves daily should have its churn reviewed while it is'
+        $iss += 'still cheap to review.'
+    }
     $iss += ''
     $iss += '> Draft issue for [metif12/vails](https://github.com/metif12/vails). Generated by'
     $iss += '> `scripts/sync-vails.ps1`; check the numbers before sending.'
     $iss += ''
-    $iss += 'Fluxget treats vails as an unstable dependency: it vendors the framework as a git'
-    $iss += 'submodule and runs a machine-checked API contract before every build. The contract'
-    $iss += 'is the list of symbols the app imports, and it is what broke.'
-    $iss += ''
     $iss += '| | |'
     $iss += '|---|---|'
     $iss += "| last known good | ``$(if ($lock) { $lock.sha } else { 'n/a' })`` |"
-    $iss += "| broken HEAD | ``$(Get-VailsSha)`` |"
-    $iss += "| HEAD date | $(Get-VailsDate) |"
+    $iss += "| compared | ``$(Get-VailsSha)`` |"
+    $iss += "| revision date | $(Get-VailsDate) |"
+    $iss += "| Fluxget contract symbols | $($script:ContractPatterns.Count) checked, **$($missing.Count) missing** |"
     $iss += ''
     if ($missing.Count -gt 0) {
         $iss += '## Symbols Fluxget imports that are gone'
@@ -250,6 +327,9 @@ function Write-CompatReport {
     }
     if ($removed.Count -gt 0) {
         $iss += '## Removed from the public surface'
+        $iss += ''
+        $iss += 'Compared by file path and declaration text, so a declaration that merely moved is'
+        $iss += 'not in this list.'
         $iss += ''
         foreach ($r2 in ($removed | Sort-Object)) { $iss += "- ``$r2``" }
         $iss += ''

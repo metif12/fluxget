@@ -1,230 +1,273 @@
 # vails compatibility report
 
-Generated 2026-09-27 15:30:51 +03:30 by `scripts/sync-vails.ps1`.
+Generated 2026-10-03 13:27:31 +03:30 by `scripts/sync-vails.ps1`.
 
 | | |
 |---|---|
-| locked (vails.lock) | `(none - first run)` |
-| checked out | `7e11fe22ecce47a06bb2c720842a159d0638c5d4` |
-| origin/main | `7e11fe22ecce47a06bb2c720842a159d0638c5d4` |
-| vails commit date | 2026-09-27T13:27:24+03:30 |
+| locked (vails.lock) | `ea96ecc199dbad980d3c2625eb218cda76b33be8` |
+| checked out | `ea96ecc199dbad980d3c2625eb218cda76b33be8` |
+| origin/main | `e4e99ad918f8d7b0fb426675597242580d77098f` |
+| vails commit date | 2026-09-27T16:11:11+03:30 |
 
 ## Contract symbols (34 checked)
 
 All contract symbols are present in the checked-out tree.
 
-## Public API surface: 203 added, 0 removed
+## Checked-out tree vs locked: 0 added, 0 removed
 
-### Added
+No change in the `pub` surface between the locked revision and the checked-out tree.
 
-- `HEAD:application/application.v:18:pub struct App {`
-- `HEAD:application/application.v:30:pub fn new(opts AppOptions) App {`
-- `HEAD:application/application.v:39:pub fn (mut a App) register_service(name string) ! {`
-- `HEAD:application/application.v:46:pub fn (a App) has_service(name string) bool {`
-- `HEAD:application/application.v:50:pub fn (a App) is_running() bool {`
-- `HEAD:application/application.v:55:pub fn (mut a App) set_state(key string, val_json string) ! {`
-- `HEAD:application/application.v:60:pub fn (a App) get_state(key string) !string {`
-- `HEAD:application/application.v:65:pub fn (a App) has_state(key string) bool {`
-- `HEAD:application/application.v:8:pub struct AppOptions {`
-- `HEAD:application/application.v:9:pub mut:`
-- `HEAD:assets/assets.v:21:pub fn (s Server) read(path string) !string {`
-- `HEAD:assets/assets.v:34:pub fn (s Server) resolve_for(window_label string, path string, reg capabilities.Registry) !string {`
-- `HEAD:assets/assets.v:81:pub fn content_type(path string) string {`
-- `HEAD:assets/assets.v:9:pub struct Server {`
-- `HEAD:assets/bundle.v:14:pub struct Bundle {`
-- `HEAD:assets/bundle.v:24:pub fn (b Bundle) read(path string) !string {`
-- `HEAD:assets/bundle.v:32:pub fn (b Bundle) resolve_for(window_label string, path string, reg capabilities.Registry) !string {`
-- `HEAD:bridge/bridge.v:105:pub fn validate_empty(params string) !void {`
-- `HEAD:bridge/bridge.v:116:pub fn validate_any(params string) !void {`
-- `HEAD:bridge/bridge.v:126:pub fn (r Router) call_from(window_label string, id string, method string, params string, reg capabilities.Registry) Response {`
-- `HEAD:bridge/bridge.v:134:pub fn (r Router) call_json(window_label string, id string, method string, params string, reg capabilities.Registry) Response {`
-- `HEAD:bridge/bridge.v:146:pub fn (r Router) call(id string, method string, params string) Response {`
-- `HEAD:bridge/bridge.v:168:pub fn (r Router) call_validated(id string, method string, params string) Response {`
-- `HEAD:bridge/bridge.v:20:pub struct Request {`
-- `HEAD:bridge/bridge.v:201:pub fn (r Router) notify(window_label string, event string, data string, reg capabilities.Registry) !void {`
-- `HEAD:bridge/bridge.v:21:pub mut:`
-- `HEAD:bridge/bridge.v:211:pub fn encode_request(id string, method string, params string) string {`
-- `HEAD:bridge/bridge.v:221:pub fn decode_request(raw string) !Request {`
-- `HEAD:bridge/bridge.v:225:pub fn encode_notify(event string, data string) string {`
-- `HEAD:bridge/bridge.v:234:pub fn decode_notify(raw string) !Notify {`
-- `HEAD:bridge/bridge.v:238:pub fn encode_response(res Response) string {`
-- `HEAD:bridge/bridge.v:27:pub struct Response {`
-- `HEAD:bridge/bridge.v:28:pub mut:`
-- `HEAD:bridge/bridge.v:36:pub struct Notify {`
-- `HEAD:bridge/bridge.v:37:pub mut:`
-- `HEAD:bridge/bridge.v:42:pub type MethodHandler = fn (params string) !string`
-- `HEAD:bridge/bridge.v:46:pub type ParamsValidator = fn (params string) !void`
-- `HEAD:bridge/bridge.v:48:pub struct Router {`
-- `HEAD:bridge/bridge.v:54:pub fn new_router() Router {`
-- `HEAD:bridge/bridge.v:61:pub fn (mut r Router) register(name string, h MethodHandler) ! {`
-- `HEAD:bridge/bridge.v:71:pub fn (mut r Router) register_validated(name string, validate ParamsValidator, h MethodHandler) ! {`
-- `HEAD:bridge/bridge.v:82:pub fn err_unknown(method string) string {`
-- `HEAD:bridge/bridge.v:86:pub fn err_forbidden(method string, window_label string) string {`
-- `HEAD:bridge/bridge.v:90:pub fn err_bad_request(detail string) string {`
-- `HEAD:bridge/bridge.v:94:pub fn err_bad_params(detail string) string {`
-- `HEAD:bridge/bridge.v:98:pub fn err_bad_event(detail string) string {`
-- `HEAD:bridge/channels.v:13:pub struct Channel {`
-- `HEAD:bridge/channels.v:22:pub fn (c Channel) is_closed() bool {`
-- `HEAD:bridge/channels.v:29:pub fn (c Channel) push_js(data string) !string {`
-- `HEAD:bridge/channels.v:39:pub fn (mut c Channel) close_js() string {`
-- `HEAD:bridge/channels.v:46:pub struct ChannelHub {`
-- `HEAD:bridge/channels.v:52:pub fn new_hub() ChannelHub {`
-- `HEAD:bridge/channels.v:59:pub fn (mut h ChannelHub) open(event string) !Channel {`
-- `HEAD:bridge/transport.v:103:pub fn (r Router) handle_envelope_from(raw string, window_label string, reg capabilities.Registry) string {`
-- `HEAD:bridge/transport.v:134:pub fn resolve_js(res Response) string {`
-- `HEAD:bridge/transport.v:148:pub fn runtime_js() string {`
-- `HEAD:bridge/transport.v:16:pub fn (r Router) handle_message(raw string) string {`
-- `HEAD:bridge/transport.v:160:pub fn runtime_js_bound(binding string) string {`
-- `HEAD:bridge/transport.v:33:pub fn (r Router) handle_message_from(raw string, window_label string, reg capabilities.Registry) string {`
-- `HEAD:bridge/transport.v:46:pub struct NotifyAck {`
-- `HEAD:bridge/transport.v:47:pub mut:`
-- `HEAD:bridge/transport.v:52:pub fn encode_notify_ack_ok() string {`
-- `HEAD:bridge/transport.v:60:pub fn encode_notify_ack_err(msg string) string {`
-- `HEAD:bridge/transport.v:72:pub fn (r Router) handle_notify_from(raw string, window_label string, reg capabilities.Registry) string {`
-- `HEAD:bridge/transport.v:86:pub struct Envelope {`
-- `HEAD:bridge/transport.v:87:pub mut:`
-- `HEAD:bridge/transport.v:95:pub fn decode_envelope(raw string) !Envelope {`
-- `HEAD:capabilities/capabilities.v:12:pub struct Capability {`
-- `HEAD:capabilities/capabilities.v:22:pub struct Registry {`
-- `HEAD:capabilities/capabilities.v:28:pub fn new_registry() Registry {`
-- `HEAD:capabilities/capabilities.v:34:pub fn (mut r Registry) grant(c Capability) {`
-- `HEAD:capabilities/capabilities.v:39:pub fn (r Registry) is_allowed(window_label string, command string) bool {`
-- `HEAD:capabilities/capabilities.v:45:pub fn (r Registry) is_allowed_on(window_label string, command string, target_os string) bool {`
-- `HEAD:capabilities/capabilities.v:64:pub fn (r Registry) asset_roots_of(window_label string, target_os string) []string {`
-- `HEAD:config/config.v:133:pub fn (c VailsConfig) window(label string) !WindowConfig {`
-- `HEAD:config/config.v:144:pub fn (c VailsConfig) to_registry() capabilities.Registry {`
-- `HEAD:config/config.v:15:pub struct WindowConfig {`
-- `HEAD:config/config.v:159:pub fn (c VailsConfig) encode() string {`
-- `HEAD:config/config.v:16:pub mut:`
-- `HEAD:config/config.v:26:pub struct CapabilitySpec {`
-- `HEAD:config/config.v:27:pub mut:`
-- `HEAD:config/config.v:38:pub struct BundleConfig {`
-- `HEAD:config/config.v:39:pub mut:`
-- `HEAD:config/config.v:47:pub struct VailsConfig {`
-- `HEAD:config/config.v:48:pub mut:`
-- `HEAD:config/config.v:59:pub fn default_config(app_name string) VailsConfig {`
-- `HEAD:config/config.v:77:pub fn load(path string) !VailsConfig {`
-- `HEAD:config/config.v:86:pub fn load_text(text string) !VailsConfig {`
-- `HEAD:config/config.v:96:pub fn (c VailsConfig) validate() ! {`
-- `HEAD:dev/dev.v:117:pub fn (s DevServer) current_version() string {`
-- `HEAD:dev/dev.v:124:pub fn (s DevServer) frontend_version() string {`
-- `HEAD:dev/dev.v:152:pub fn status_for_err(err IError) http.Status {`
-- `HEAD:dev/dev.v:162:pub fn inject_livereload(html string, port int) string {`
-- `HEAD:dev/dev.v:177:pub fn livereload_snippet(port int) string {`
-- `HEAD:dev/dev.v:22:pub const default_port = 8413`
-- `HEAD:dev/dev.v:26:pub const version_path = '/__vails_dev_version'`
-- `HEAD:dev/dev.v:30:pub struct DevServer {`
-- `HEAD:dev/dev.v:44:pub struct ServeResult {`
-- `HEAD:dev/dev.v:50:pub fn new_dev_server(root string, asset_root string, port int, reg capabilities.Registry, label string) DevServer {`
-- `HEAD:dev/dev.v:62:pub fn (s DevServer) dev_url() string {`
-- `HEAD:dev/dev.v:69:pub fn (s DevServer) resolve_request(raw_path string) !ServeResult {`
-- `HEAD:dev/serve.v:36:pub fn (s DevServer) run() ! {`
-- `HEAD:events/common.v:14:pub const common_battery = 'common:battery'`
-- `HEAD:events/common.v:15:pub const common_network = 'common:network'`
-- `HEAD:events/common.v:16:pub const common_theme = 'common:theme'`
-- `HEAD:events/common.v:17:pub const common_low_memory = 'common:low-memory'`
-- `HEAD:events/events.v:14:pub fn new_bus() Bus {`
-- `HEAD:events/events.v:20:pub fn (mut b Bus) on(event string, h Handler) {`
-- `HEAD:events/events.v:26:pub fn (b Bus) emit(event string, data string) int {`
-- `HEAD:events/events.v:34:pub fn (b Bus) handler_count(event string) int {`
-- `HEAD:events/events.v:5:pub type Handler = fn (data string)`
-- `HEAD:events/events.v:9:pub struct Bus {`
-- `HEAD:events/js.v:8:pub fn to_js(event string, data string) string {`
-- `HEAD:generator/generator.v:16:pub fn generate_dts(namespace string, methods []MethodSpec) string {`
-- `HEAD:generator/generator.v:7:pub struct MethodSpec {`
-- `HEAD:jsesc/jsesc.v:8:pub fn escape(s string) string {`
-- `HEAD:mobile/mobile.v:20:pub fn apply_geometry(width int, height int) ! {`
-- `HEAD:mobile/mobile.v:9:pub fn is_mobile() bool {`
-- `HEAD:services/catalog.v:16:pub fn manifests() []Service {`
-- `HEAD:services/clipboard.v:20:pub fn clipboard_manifest() Service {`
-- `HEAD:services/clipboard.v:47:pub fn read_text() !string {`
-- `HEAD:services/clipboard.v:57:pub fn write_text(text string) ! {`
-- `HEAD:services/clipboard.v:73:pub fn install_clipboard(mut router bridge.Router, _ctx webview.Ctx) ! {`
-- `HEAD:services/dialog.v:106:pub fn (o Options) validate(want string) ! {`
-- `HEAD:services/dialog.v:148:pub fn validate_filter(f Filter) ! {`
-- `HEAD:services/dialog.v:177:pub fn is_button_set(s string) bool {`
-- `HEAD:services/dialog.v:184:pub fn native_filter_string(filters []Filter) string {`
-- `HEAD:services/dialog.v:204:pub fn encode_result(r Result) string {`
-- `HEAD:services/dialog.v:213:pub fn parse_paths(buf string) []string {`
-- `HEAD:services/dialog.v:224:pub fn dialog_manifest() Service {`
-- `HEAD:services/dialog.v:27:pub const kind_open = 'open'`
-- `HEAD:services/dialog.v:276:pub fn dialog_backend(ctx webview.Ctx) Backend {`
-- `HEAD:services/dialog.v:28:pub const kind_save = 'save'`
-- `HEAD:services/dialog.v:29:pub const kind_message = 'message'`
-- `HEAD:services/dialog.v:303:pub fn install_dialog(mut router bridge.Router, ctx webview.Ctx) ! {`
-- `HEAD:services/dialog.v:32:pub const buttons_ok = 'ok'`
-- `HEAD:services/dialog.v:33:pub const buttons_ok_cancel = 'okcancel'`
-- `HEAD:services/dialog.v:34:pub const buttons_yes_no_cancel = 'yesnocancel'`
-- `HEAD:services/dialog.v:48:pub struct Filter {`
-- `HEAD:services/dialog.v:49:pub mut:`
-- `HEAD:services/dialog.v:57:pub struct Options {`
-- `HEAD:services/dialog.v:58:pub mut:`
-- `HEAD:services/dialog.v:72:pub struct Result {`
-- `HEAD:services/dialog.v:73:pub mut:`
-- `HEAD:services/dialog.v:83:pub fn parse_options(want string, params string) !Options {`
-- `HEAD:services/dts.v:16:pub fn (s Service) specs() []generator.MethodSpec {`
-- `HEAD:services/dts.v:34:pub fn dts(svcs []Service) string {`
-- `HEAD:services/dts.v:61:pub fn snippets(svcs []Service) string {`
-- `HEAD:services/dts.v:73:pub fn granted_commands(commands []string) []string {`
-- `HEAD:services/install.v:24:pub type Handler = fn (params string) !string`
-- `HEAD:services/install.v:26:pub type Backend = map[string]Handler`
-- `HEAD:services/install.v:32:pub fn install(mut router bridge.Router, s Service, backend Backend) ! {`
-- `HEAD:services/install.v:55:pub fn install_all(mut router bridge.Router, svcs []Service, backends map[string]Backend) ! {`
-- `HEAD:services/manifest.v:107:pub fn (s Service) js_snippet() string {`
-- `HEAD:services/manifest.v:122:pub fn find(name string) ?Service {`
-- `HEAD:services/manifest.v:128:pub fn find_in(list []Service, name string) ?Service {`
-- `HEAD:services/manifest.v:140:pub fn service_of(command string) ?Service {`
-- `HEAD:services/manifest.v:145:pub fn service_in(list []Service, command string) ?Service {`
-- `HEAD:services/manifest.v:15:pub struct Command {`
-- `HEAD:services/manifest.v:162:pub fn lookup(command string) ?(Service, Command) {`
-- `HEAD:services/manifest.v:167:pub fn lookup_in(list []Service, command string) ?(Service, Command) {`
-- `HEAD:services/manifest.v:184:pub fn select_for(granted []string) ([]Service, []string) {`
-- `HEAD:services/manifest.v:189:pub fn select_in(list []Service, granted []string) ([]Service, []string) {`
-- `HEAD:services/manifest.v:33:pub const no_params = ''`
-- `HEAD:services/manifest.v:36:pub struct Service {`
-- `HEAD:services/manifest.v:51:pub fn (s Service) prefix() string {`
-- `HEAD:services/manifest.v:56:pub fn (s Service) has_command(name string) bool {`
-- `HEAD:services/manifest.v:62:pub fn (s Service) command_names() []string {`
-- `HEAD:services/manifest.v:71:pub fn (s Service) command(name string) ?Command {`
-- `HEAD:services/manifest.v:82:pub fn (s Service) own_command(name string) bool {`
-- `HEAD:services/manifest.v:88:pub fn (c Command) short_name() string {`
-- `HEAD:services/manifest.v:96:pub fn (c Command) matches(name string) bool {`
-- `HEAD:services/os_info.v:22:pub struct Info {`
-- `HEAD:services/os_info.v:23:pub mut:`
-- `HEAD:services/os_info.v:50:pub fn os_info_manifest() Service {`
-- `HEAD:services/os_info.v:79:pub fn collect() Info {`
-- `HEAD:services/os_info.v:90:pub fn os_info_backend() Backend {`
-- `HEAD:services/os_info.v:99:pub fn install_os_info(mut router bridge.Router) ! {`
-- `HEAD:state/store.v:15:pub struct Store {`
-- `HEAD:state/store.v:21:pub fn new_store() Store {`
-- `HEAD:state/store.v:30:pub fn (mut s Store) set(key string, val_json string) ! {`
-- `HEAD:state/store.v:38:pub fn (s Store) get(key string) !string {`
-- `HEAD:state/store.v:43:pub fn (mut s Store) remove(key string) {`
-- `HEAD:state/store.v:48:pub fn (s Store) has(key string) bool {`
-- `HEAD:state/store.v:53:pub fn (s Store) len() int {`
-- `HEAD:state/store.v:58:pub fn (s Store) keys() []string {`
-- `HEAD:state/store.v:63:pub fn (mut s Store) set_string(key string, val string) ! {`
-- `HEAD:state/store.v:68:pub fn (s Store) get_string(key string) !string {`
-- `HEAD:webview/ctx.v:19:pub type EvalFn = fn (js string) !`
-- `HEAD:webview/ctx.v:24:pub struct Ctx {`
-- `HEAD:webview/ctx.v:25:pub mut:`
-- `HEAD:webview/ctx.v:39:pub fn (c Ctx) emit(event string, data string) ! {`
-- `HEAD:webview/ctx.v:47:pub fn (c Ctx) run_js(js string) ! {`
-- `HEAD:webview/ctx.v:55:pub fn (c Ctx) has_parent() bool {`
-- `HEAD:webview/ctx.v:60:pub fn (c Ctx) is_ready() bool {`
-- `HEAD:webview/secure.v:16:pub fn default_csp() string {`
-- `HEAD:webview/secure.v:21:pub fn csp_meta() string {`
-- `HEAD:webview/secure.v:30:pub fn inject_csp(html string) string {`
-- `HEAD:webview/webview.v:40:pub fn (cfg Config) document() string {`
-- `HEAD:webview/webview.v:52:pub fn (cfg Config) validate() ! {`
-- `HEAD:webview/webview.v:63:pub fn run(cfg Config) ! {`
-- `HEAD:webview/webview.v:8:pub struct Config {`
-- `HEAD:webview/webview.v:9:pub mut:`
+## origin/main vs locked: 218 added, 13 removed
+
+What the newest upstream revision does to the surface. This is the comparison to read
+when a run rolled back, because the checked-out tree is then the locked revision and
+the section above is empty by construction.
+
+### Removed or renamed upstream
+
+- `services/notification.v:pub fn install_notification(mut router bridge.Router, ctx webview.Ctx) ! {`
+- `services/notification.v:pub fn notification_backend(ctx webview.Ctx) Backend {`
+- `services/notification.v:pub fn notify(ctx webview.Ctx, opts NotificationOptions) ! {`
+- `state/store.v:pub fn (mut s Store) remove(key string) {`
+- `state/store.v:pub fn (mut s Store) set(key string, val_json string) ! {`
+- `state/store.v:pub fn (mut s Store) set_string(key string, val string) ! {`
+- `state/store.v:pub fn (s Store) get(key string) !string {`
+- `state/store.v:pub fn (s Store) get_string(key string) !string {`
+- `state/store.v:pub fn (s Store) has(key string) bool {`
+- `state/store.v:pub fn (s Store) keys() []string {`
+- `state/store.v:pub fn (s Store) len() int {`
+- `state/store.v:pub fn new_store() Store {`
+- `state/store.v:pub struct Store {`
+
+### Added upstream
+
+- `buildinfo/buildinfo.v:pub const dev_version = 'dev'`
+- `buildinfo/buildinfo.v:pub const framework_version = '0.4.0'`
+- `buildinfo/buildinfo.v:pub const help = '--version <semver>   stamp the build (-d ' + ident +`
+- `buildinfo/buildinfo.v:pub const ident = 'vails_version'`
+- `buildinfo/buildinfo.v:pub fn describe() string {`
+- `buildinfo/buildinfo.v:pub fn is_release() bool {`
+- `buildinfo/buildinfo.v:pub fn is_release_version(v string) bool {`
+- `buildinfo/buildinfo.v:pub fn v_mod_version(text string) ?string {`
+- `buildinfo/buildinfo.v:pub fn validate_version(v string) !string {`
+- `buildinfo/buildinfo.v:pub fn version() string {`
+- `buildinfo/buildinfo.v:pub fn version_drift(v_mod_text string) string {`
+- `buildplan/buildplan.v:pub const side_by_side_dlls = [`
+- `buildplan/buildplan.v:pub const ucrt64_bin = 'C:/msys64/ucrt64/bin'`
+- `buildplan/buildplan.v:pub fn (r Recipe) command(root string) string {`
+- `buildplan/buildplan.v:pub fn (r Recipe) dll_targets() []string {`
+- `buildplan/buildplan.v:pub fn (r Recipe) has_flag(flag string) bool {`
+- `buildplan/buildplan.v:pub fn app_flags(target Target) []string {`
+- `buildplan/buildplan.v:pub fn cli_flags(target Target) []string {`
+- `buildplan/buildplan.v:pub fn missing_dlls(dir string) []string {`
+- `buildplan/buildplan.v:pub fn needs_gc_none(target Target) bool {`
+- `buildplan/buildplan.v:pub fn recipe(target Target, name string, windows_dll_side_by_side bool, version string) Recipe {`
+- `buildplan/buildplan.v:pub fn stage_side_by_side(target Target, windows_dll_side_by_side bool) (bool, string, []string) {`
+- `buildplan/buildplan.v:pub mut:`
+- `buildplan/buildplan.v:pub struct Recipe {`
+- `buildplan/toolchain.v:pub const default_toolchain_root = 'C:/msys64/ucrt64'`
+- `buildplan/toolchain.v:pub const toolchain_env = 'VAILS_TOOLCHAIN'`
+- `buildplan/toolchain.v:pub fn (tc &Toolchain) is_complete() bool {`
+- `buildplan/toolchain.v:pub fn (tc &Toolchain) summary() string {`
+- `buildplan/toolchain.v:pub fn cc_supported(cc string, needs_webview bool) ! {`
+- `buildplan/toolchain.v:pub fn normalize_root(root string) string {`
+- `buildplan/toolchain.v:pub fn resolve_toolchain() Toolchain {`
+- `buildplan/toolchain.v:pub fn resolve_toolchain_from(env_root string) Toolchain {`
+- `buildplan/toolchain.v:pub fn webview_links(imports_webview bool) bool {`
+- `buildplan/toolchain.v:pub struct Toolchain {`
+- `config/config.v:pub fn default_identifier(app_name string) string {`
+- `config/config.v:pub fn validate_identifier(id string) ! {`
+- `deps/deps.v:pub const lock_path = 'vails.lock'`
+- `deps/deps.v:pub fn (s Set) encode() string {`
+- `deps/deps.v:pub fn (s Set) get(name string) ?Dependency {`
+- `deps/deps.v:pub fn (s Set) is_empty() bool {`
+- `deps/deps.v:pub fn (s Set) names() []string {`
+- `deps/deps.v:pub fn (s Set) summary() string {`
+- `deps/deps.v:pub fn (s Set) to_v_mod_dependencies() string {`
+- `deps/deps.v:pub fn decode_lock(text string) !Set {`
+- `deps/deps.v:pub fn empty_set() Set {`
+- `deps/deps.v:pub fn encode_lock(resolved []Dependency) string {`
+- `deps/deps.v:pub fn is_exact_requirement(version string) bool {`
+- `deps/deps.v:pub fn parse(text string) !Set {`
+- `deps/deps.v:pub fn parse_report(text string) string {`
+- `deps/deps.v:pub fn validate(items []Dependency) !Set {`
+- `deps/deps.v:pub fn validate_dependency(d Dependency) ! {`
+- `deps/deps.v:pub mut:`
+- `deps/deps.v:pub struct Dependency {`
+- `deps/deps.v:pub struct Set {`
+- `examples/multiwindow/main.v:pub mut:`
+- `examples/multiwindow/main.v:pub mut:`
+- `services/dialog.v:pub const button_cancel = 'cancel'`
+- `services/dialog.v:pub const button_no = 'no'`
+- `services/dialog.v:pub const button_none = 'none'`
+- `services/dialog.v:pub const button_ok = 'ok'`
+- `services/dialog.v:pub const button_yes = 'yes'`
+- `services/dialog.v:pub fn gtk_button_name(rc int) ?string {`
+- `services/dialog.v:pub fn gtk_chooser_accepted(rc int) bool {`
+- `services/dialog.v:pub fn gtk_message_result(rc int) Result {`
+- `services/drop.v:pub const event_drop_files = 'drop:files'`
+- `services/drop.v:pub fn (s &DropState) is_enabled() bool {`
+- `services/drop.v:pub fn decide_drop(e webview.HostEvent, valid int) DropAction {`
+- `services/drop.v:pub fn disable_drop(mut st &DropState) ! {`
+- `services/drop.v:pub fn drop_backend(mut st &DropState) Backend {`
+- `services/drop.v:pub fn drop_files_data(paths []string) string {`
+- `services/drop.v:pub fn drop_manifest() Service {`
+- `services/drop.v:pub fn drop_support() ServiceStatus {`
+- `services/drop.v:pub fn enable_drop(mut st &DropState) ! {`
+- `services/drop.v:pub fn install_drop(mut router bridge.Router, ctx webview.Ctx) !&DropState {`
+- `services/drop.v:pub fn is_drop_message(e webview.HostEvent) bool {`
+- `services/drop.v:pub fn validate_dropped_paths(paths []string) []string {`
+- `services/drop.v:pub struct DropState {`
+- `services/drop_test.v:pub mut:`
+- `services/menu.v:pub const event_menu_canceled = 'menu:canceled'`
+- `services/menu.v:pub const event_menu_clicked = 'menu:clicked'`
+- `services/menu.v:pub const wm_command = u32(0x0111)`
+- `services/menu.v:pub fn bar_click(e webview.HostEvent, ids []string) ?string {`
+- `services/menu.v:pub fn canceled_data() string {`
+- `services/menu.v:pub fn close(mut st &MenuState) ! {`
+- `services/menu.v:pub fn emit_menu_clicked(ctx webview.Ctx, id string) ! {`
+- `services/menu.v:pub fn flatten_items(items []MenuItem) []string {`
+- `services/menu.v:pub fn install_menu(mut router bridge.Router, ctx webview.Ctx) ! {`
+- `services/menu.v:pub fn is_valid_id(id string) bool {`
+- `services/menu.v:pub fn is_valid_label(label string) bool {`
+- `services/menu.v:pub fn menu_backend(ctx webview.Ctx) Backend {`
+- `services/menu.v:pub fn menu_clicked_data(id string) string {`
+- `services/menu.v:pub fn menu_manifest() Service {`
+- `services/menu.v:pub fn menu_support() ServiceStatus {`
+- `services/menu.v:pub fn parse_popup(params string) ![]MenuItem {`
+- `services/menu.v:pub fn popup(mut st &MenuState, items []MenuItem) ! {`
+- `services/menu.v:pub fn set_menu(mut st &MenuState, items []MenuItem) ! {`
+- `services/menu.v:pub fn validate_items(items []MenuItem) ! {`
+- `services/menu.v:pub mut:`
+- `services/menu.v:pub mut:`
+- `services/menu.v:pub mut:`
+- `services/menu.v:pub struct MenuItem {`
+- `services/menu.v:pub struct MenuPopup {`
+- `services/menu.v:pub struct MenuState {`
+- `services/notification.v:pub const backend_toast = 'toast'`
+- `services/notification.v:pub fn escape_xml(s string) string {`
+- `services/notification.v:pub fn install_notification(mut router bridge.Router, ctx webview.Ctx, id AppIdentity) ! {`
+- `services/notification.v:pub fn notification_backend(ctx webview.Ctx, id AppIdentity) Backend {`
+- `services/notification.v:pub fn notify(ctx webview.Ctx, id AppIdentity, opts NotificationOptions) !string {`
+- `services/notification.v:pub fn toast_duration(timeout_ms int) string {`
+- `services/notification.v:pub fn toast_xml(opts NotificationOptions) string {`
+- `services/notification.v:pub struct AppIdentity {`
+- `services/notification_windows.c.v:pub fn toast_available() bool {`
+- `services/tray.v:pub const button_left = 'left'`
+- `services/tray.v:pub const button_right = 'right'`
+- `services/tray.v:pub const event_tray_clicked = 'tray:clicked'`
+- `services/tray.v:pub fn (s &TrayState) has_menu() bool {`
+- `services/tray.v:pub fn (s &TrayState) is_installed() bool {`
+- `services/tray.v:pub fn button_lparam(button string) i64 {`
+- `services/tray.v:pub fn classify_click(lparam i64) ?string {`
+- `services/tray.v:pub fn decide(e webview.HostEvent, has_menu bool) TrayAction {`
+- `services/tray.v:pub fn destroy_tray(mut st &TrayState) ! {`
+- `services/tray.v:pub fn install_tray(mut router bridge.Router, ctx webview.Ctx) !&TrayState {`
+- `services/tray.v:pub fn is_button(name string) bool {`
+- `services/tray.v:pub fn parse_tray_options(params string) !TrayOptions {`
+- `services/tray.v:pub fn set_tray(mut st &TrayState, opts TrayOptions) ! {`
+- `services/tray.v:pub fn set_tray_menu(mut st &TrayState, items []MenuItem) ! {`
+- `services/tray.v:pub fn simulate_click(st &TrayState, button string) ! {`
+- `services/tray.v:pub fn tray_backend(mut st &TrayState) Backend {`
+- `services/tray.v:pub fn tray_click(e webview.HostEvent, has_menu bool) ?TrayClick {`
+- `services/tray.v:pub fn tray_clicked_data(c TrayClick) string {`
+- `services/tray.v:pub fn tray_manifest() Service {`
+- `services/tray.v:pub fn tray_menu_click(e webview.HostEvent, has_menu bool) bool {`
+- `services/tray.v:pub fn tray_support() ServiceStatus {`
+- `services/tray.v:pub fn validate_tray_options(opts TrayOptions) ! {`
+- `services/tray.v:pub mut:`
+- `services/tray.v:pub mut:`
+- `services/tray.v:pub struct TrayClick {`
+- `services/tray.v:pub struct TrayOptions {`
+- `services/tray.v:pub struct TrayState {`
+- `sqlreg/sqlreg.v:pub fn (q Query) bind(params map[string]string) ![]string {`
+- `sqlreg/sqlreg.v:pub fn (q Query) is_write() bool {`
+- `sqlreg/sqlreg.v:pub fn (q Query) mutability() string {`
+- `sqlreg/sqlreg.v:pub fn (r QueryRegistry) get(name string) ?Query {`
+- `sqlreg/sqlreg.v:pub fn (r QueryRegistry) names() []string {`
+- `sqlreg/sqlreg.v:pub fn (r QueryRegistry) resolve(name string) !Query {`
+- `sqlreg/sqlreg.v:pub fn (r QueryRegistry) resolve_read(name string) !Query {`
+- `sqlreg/sqlreg.v:pub fn (r QueryRegistry) summary() string {`
+- `sqlreg/sqlreg.v:pub fn bind_ok(q Query, params map[string]string) bool {`
+- `sqlreg/sqlreg.v:pub fn bind_report(q Query, params map[string]string) string {`
+- `sqlreg/sqlreg.v:pub fn new_registry(queries []Query) !QueryRegistry {`
+- `sqlreg/sqlreg.v:pub fn validate_name(name string) ! {`
+- `sqlreg/sqlreg.v:pub fn validate_statement(text string) ! {`
+- `sqlreg/sqlreg.v:pub struct Query {`
+- `sqlreg/sqlreg.v:pub struct QueryRegistry {`
+- `state/appstate.v:pub fn (mut s AppState) remove(key string) {`
+- `state/appstate.v:pub fn (mut s AppState) set(key string, val_json string) ! {`
+- `state/appstate.v:pub fn (mut s AppState) set_string(key string, val string) ! {`
+- `state/appstate.v:pub fn (s AppState) get(key string) !string {`
+- `state/appstate.v:pub fn (s AppState) get_string(key string) !string {`
+- `state/appstate.v:pub fn (s AppState) has(key string) bool {`
+- `state/appstate.v:pub fn (s AppState) keys() []string {`
+- `state/appstate.v:pub fn (s AppState) len() int {`
+- `state/appstate.v:pub fn new_appstate() AppState {`
+- `state/appstate.v:pub struct AppState {`
+- `webview/ctx.v:pub fn (c Ctx) can_close() bool {`
+- `webview/ctx.v:pub fn (c Ctx) close() ! {`
+- `webview/ctx.v:pub fn (c Ctx) has_main() bool {`
+- `webview/ctx.v:pub fn (c Ctx) has_toplevel() bool {`
+- `webview/ctx.v:pub type CloseFn = fn ()`
+- `webview/host.v:pub const host_message = u32(0x8001)`
+- `webview/host.v:pub const wakeup_message = u32(0x8002)`
+- `webview/host.v:pub fn (h &HostCtx) has_handler() bool {`
+- `webview/host.v:pub fn (h &HostCtx) is_active() bool {`
+- `webview/host.v:pub fn attach(ctx Ctx, on_event HostHandler) !&HostCtx {`
+- `webview/host.v:pub fn detach(mut host &HostCtx) {`
+- `webview/host.v:pub fn post_message(ctx Ctx, msg u32, wparam u64, lparam i64) ! {`
+- `webview/host.v:pub mut:`
+- `webview/host.v:pub struct HostCtx {`
+- `webview/host.v:pub struct HostEvent {`
+- `webview/host.v:pub type HostHandler = fn (e HostEvent) !bool`
+- `webview/jobs.v:pub fn (mut mt MainThread) destroy() {`
+- `webview/jobs.v:pub fn (mut mt MainThread) install_wakeup(ctx Ctx) ! {`
+- `webview/jobs.v:pub fn (mut q JobQueue) destroy() {`
+- `webview/jobs.v:pub fn (mut q JobQueue) drain() int {`
+- `webview/jobs.v:pub fn (mut q JobQueue) push(job Job) {`
+- `webview/jobs.v:pub fn (mut q JobQueue) run_batch(batch []Job) int {`
+- `webview/jobs.v:pub fn (mut q JobQueue) take() []Job {`
+- `webview/jobs.v:pub fn new_main_thread() &MainThread {`
+- `webview/jobs.v:pub fn new_queue() JobQueue {`
+- `webview/jobs.v:pub fn post_to_main(ctx Ctx, job Job) ! {`
+- `webview/jobs.v:pub mut:`
+- `webview/jobs.v:pub mut:`
+- `webview/jobs.v:pub struct JobQueue {`
+- `webview/jobs.v:pub struct MainThread {`
+- `webview/jobs.v:pub type Job = fn ()`
+- `webview/webview.v:pub fn check_windows(cfgs []Config) ! {`
+- `webview/webview.v:pub fn run_many(cfgs []Config) ! {`
+- `webview/window.v:pub fn (mut r WindowRegistry) add(w &Window) ! {`
+- `webview/window.v:pub fn (mut r WindowRegistry) remove(label string) &Window {`
+- `webview/window.v:pub fn (r &WindowRegistry) count() int {`
+- `webview/window.v:pub fn (r &WindowRegistry) emit_all(event string, data string) ! {`
+- `webview/window.v:pub fn (r &WindowRegistry) emit_to(label string, event string, data string) ! {`
+- `webview/window.v:pub fn (r &WindowRegistry) find(label string) &Window {`
+- `webview/window.v:pub fn (r &WindowRegistry) get(label string) !&Window {`
+- `webview/window.v:pub fn (r &WindowRegistry) has(label string) bool {`
+- `webview/window.v:pub fn (r &WindowRegistry) labels() []string {`
+- `webview/window.v:pub fn (r &WindowRegistry) open_labels() []string {`
+- `webview/window.v:pub fn (r &WindowRegistry) stop_all() ! {`
+- `webview/window.v:pub fn (w &Window) can_emit() bool {`
+- `webview/window.v:pub fn (w &Window) is_open() bool {`
+- `webview/window.v:pub fn label_js(base string, label string) string {`
+- `webview/window.v:pub fn new_registry() &WindowRegistry {`
+- `webview/window.v:pub fn new_window(label string) &Window {`
+- `webview/window.v:pub fn state_name(s WindowState) string {`
+- `webview/window.v:pub mut:`
+- `webview/window.v:pub mut:`
+- `webview/window.v:pub struct Window {`
+- `webview/window.v:pub struct WindowRegistry {`
 
 ## Fluxget commits to vails
 
-Next in the vails plan: `notification`, `clipboard` (native half), `menu`, `tray`,
-`opener`, `window-state`, then S2 `single-instance` and `store`. Each already has a
-`// COMPAT(...)` marker in the Fluxget source; the ownership table lives in README.md
-under "Feature ownership".
+Listed in the vails plan: `clipboard` (native half), `menu`, `tray`, `opener`,
+`window-state`, then S2 `single-instance`. Each already has a `// COMPAT(...)` marker in
+the Fluxget source; the ownership table lives in README.md under "Feature ownership".
+
+Withdrawn upstream before Fluxget adopted them, so there is nothing to switch to and the
+capability is ours to build: `notification` (`services/notification.v`) and the `store`
+service (`state/store.v`). Both were in the plan and both are gone as of the revision
+named in the `origin/main` section above.
 
