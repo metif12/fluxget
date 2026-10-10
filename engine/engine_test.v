@@ -102,16 +102,43 @@ fn test_blank_uris_are_dropped_rather_than_sent() {
 fn test_a_runaway_mirror_list_is_refused() {
 	// aria2 would accept thousands. So would a frontend bug. The cap is here so
 	// the failure is a rejected request rather than a queue that stops.
+	//
+	// The entries are DISTINCT on purpose. A list of two hundred identical URLs is
+	// a de-duplication away from being one mirror, and collapsing it is the right
+	// answer - so a test built from repeats would be testing the wrong thing and
+	// would fail for the right reason.
 	f := rpc.new_fake([rpc.ok('"aa01"')])
 	mut e := eng(f)
 	mut req := AddRequest{}
 	// `len` alongside `init`, never `cap`: V 0.5.2 rejects `init` without it.
-	req.uris = []string{len: max_add_uris + 1, init: 'https://example.com/a'}
+	mut urls := []string{cap: max_add_uris + 1}
+	for i in 0 .. max_add_uris + 1 {
+		urls << 'https://m${i}.example/a'
+	}
+	req.uris = urls
 	e.add(req) or {
 		assert err.msg().contains('more than'), err.msg()
 		return
 	}
 	assert false, 'too many uris must be refused'
+}
+
+// Two hundred identical URLs are one mirror, and saying so is more useful than
+// refusing them: the user asked for one file from one host.
+fn test_a_repeated_mirror_list_collapses_instead_of_being_refused() {
+	f := rpc.new_fake([rpc.ok('"aa01"')])
+	mut e := eng(f)
+	mut urls := []string{cap: max_add_uris + 1}
+	for _ in 0 .. max_add_uris + 1 {
+		urls << 'https://same.example/a'
+	}
+	gid := e.add(AddRequest{
+		uris: urls
+	}) or {
+		assert false, 'a repeated list is one mirror, not a rejection: ${err.msg()}'
+		return
+	}
+	assert gid == 'aa01', gid
 }
 
 fn test_a_magnet_is_a_uri_and_not_a_second_code_path() {

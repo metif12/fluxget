@@ -87,25 +87,18 @@ pub mut:
 // clean_uris drops blank entries and returns the rest, or an error if nothing
 // usable is left.
 //
+// It DELEGATES to mirror_set_from rather than having a second normalisation of its
+// own. Phase 4 added trimming, scheme filtering and de-duplication to
+// mirror_set_from, and leaving clean_uris to do its own thing would mean every add
+// decided for itself what a mirror list is - and the two answers would drift the
+// first time one of them gained a rule.
+//
 // An empty add is refused rather than sent. aria2 accepts `addUri` with an
 // empty array and answers "OK", which is a lie with no gid in it, and the UI
 // would then wait forever for a download that does not exist.
 pub fn (r AddRequest) clean_uris() ![]string {
-	mut out := []string{cap: r.uris.len}
-	for u in r.uris {
-		v := u.trim_space()
-		if v == '' {
-			continue
-		}
-		out << v
-	}
-	if out.len == 0 {
-		return error('engine: no uri to download')
-	}
-	if out.len > max_add_uris {
-		return error('engine: ${out.len} uris is more than the ${max_add_uris} allowed for one download')
-	}
-	return out
+	set := mirror_set_from(r.uris) or { return err }
+	return set.uris
 }
 
 // options renders the per-download option map.
@@ -205,6 +198,30 @@ pub fn (mut e Engine) pause_all() !string {
 
 pub fn (mut e Engine) resume_all() !string {
 	return e.client.resume_all()
+}
+
+// mirror_state reports what aria2 is doing with a download's mirror set.
+//
+// This is the read half of Phase 4: we built the set (engine/mirror.v) and aria2
+// decided how to use it, and this is how the app finds out. `requested` is the set
+// we sent, because the answer contains rows for URIs we never asked for.
+//
+// The gid has to be one aria2 still knows: for a download in `error`, getUris
+// answers "No URI data is available" - the same fact that made retry need a
+// remembered source.
+pub fn (mut e Engine) mirror_state(gid string, requested []string) ![]Mirror {
+	entries := e.client.mirror_entries(gid)!
+	mut rows := []Mirror{len: entries.len}
+	mut n := 0
+	for x in entries {
+		rows[n] = Mirror{
+			uri:    x.uri
+			status: if x.status == '' { mirror_unknown } else { x.status }
+			in_use: x.status == mirror_used
+		}
+		n++
+	}
+	return mirrors_from(requested, rows[..n])
 }
 
 // retry re-queues a finished, failed or removed download from the URI it came

@@ -726,6 +726,62 @@ pub fn (mut c Client) get_uris(gid string) !string {
 	return c.call('aria2.getUris', [json2.Any(gid)])!.str()
 }
 
+// MirrorEntry is one row of an aria2.getUris answer.
+//
+// The field is `status`, not `state`, and the value is aria2's word - `used` or
+// `waiting`. Decoded here rather than in engine/mirror.v so that the wire format
+// stays in the wire-format module, which is the rule rpc/types.v's header already
+// states.
+pub struct MirrorEntry {
+pub mut:
+	uri    string
+	status string
+}
+
+// mirror_entries is getUris decoded into rows, WITHOUT de-duplication.
+//
+// It deliberately returns whatever aria2 said, repeats and all. Measured on
+// 1.37.0: an addUri with two URIs came back as FIVE rows, because aria2 expands the
+// set internally. Hiding that here would make the shape convenient and the
+// accounting a lie - engine.mirrors_from is where the set we asked for is matched
+// against the rows we got, and where the repeats are dropped.
+pub fn (mut c Client) mirror_entries(gid string) ![]MirrorEntry {
+	// .str() because the JSON-RPC layer already unwrapped the envelope and this is
+	// a fragment again: an array of objects, not a JSON document. Passing the Any
+	// straight through is a type error, and .str() is what turns a decoded
+	// json2.Any back into the text parse_mirror_entries wants.
+	return parse_mirror_entries(c.call('aria2.getUris', [json2.Any(gid)])!.str())
+}
+
+// parse_mirror_entries is the pure half, so a fixture captured from a real aria2c
+// can be decoded in a test without a transport and without the two of them
+// drifting apart.
+//
+// It DECODES the string itself rather than taking a json2.Any, and that is not a
+// stylistic choice: opt_arr wants an already-decoded Any, so handing it the raw
+// text returns nothing and every mirror silently vanishes. The first version of
+// this did exactly that, and the symptom was an empty mirror list with no error
+// anywhere - a decoder that agrees with nothing, including itself.
+pub fn parse_mirror_entries(raw string) []MirrorEntry {
+	decoded := json2.decode[json2.Any](raw) or { return []MirrorEntry{} }
+	arr := opt_arr(decoded) or { return []MirrorEntry{} }
+	mut out := []MirrorEntry{len: arr.len}
+	mut n := 0
+	for e in arr {
+		obj := opt_map(e) or { continue }
+		u := str_of(obj, 'uri')
+		if u == '' {
+			continue
+		}
+		out[n] = MirrorEntry{
+			uri:    u
+			status: str_of(obj, 'status')
+		}
+		n++
+	}
+	return out[..n]
+}
+
 // uris is get_uris decoded, and it exists because `retry` needs the SOURCE of a
 // download, not a JSON string to re-parse in a command handler.
 //

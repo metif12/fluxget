@@ -53,8 +53,15 @@ pub mut:
 	upload_limit   int
 	// split is how many connections one download may use. The floor is 1.
 	split int
-	// min_split_size is the smallest chunk, in bytes. aria2 refuses a split
-	// smaller than this; 1M is its own default and a sane floor for us.
+	// min_split_size is the smallest chunk aria2 will fetch in parallel, in bytes.
+	//
+	// 20 MiB is not a round number I liked: it is aria2's own default, read back from
+	// `aria2.getOption` on 1.37.0, which answered `"min-split-size":"20971520"`. The
+	// first version of this file shipped 1 MiB on the reasonable-sounding grounds that
+	// smaller chunks parallelise better - and silently made every split aria2 chose
+	// subject to a limit twenty times tighter than the one it would have picked. The
+	// lesson is the one this whole module is built on: check the number against the
+	// engine rather than choosing it.
 	min_split_size int
 	// dir is where downloads land. Empty means "the user's Downloads folder",
 	// resolved at spawn time rather than guessed here, so a machine where that
@@ -89,7 +96,7 @@ pub fn defaults() Settings {
 		download_limit: 0
 		upload_limit:   0
 		split:          5
-		min_split_size: 1048576
+		min_split_size: 20971520
 		dir:            ''
 		bt_enabled:     true
 		seed_ratio:     '1.0'
