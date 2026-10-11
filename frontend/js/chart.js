@@ -190,6 +190,14 @@
 		}
 
 		function area(values, colour, fill_alpha) {
+			// A gradient, not a flat wash: a filled area that fades downward reads as
+			// volume, and it is the difference between a chart and a sparkline. The
+			// colours come from the same custom properties the line reads, so a theme
+			// switch changes both or neither.
+			var grad = ctx.createLinearGradient(0, pad, 0, h - pad);
+			grad.addColorStop(0, colour_with_alpha(this, colour, fill_alpha + 0.10));
+			grad.addColorStop(1, colour_with_alpha(this, colour, 0));
+
 			ctx.beginPath();
 			ctx.moveTo(x_of(0), y_of(0));
 			for (var i = 0; i < values.length; i++) {
@@ -197,23 +205,68 @@
 			}
 			ctx.lineTo(x_of(values.length - 1), y_of(0));
 			ctx.closePath();
-			ctx.globalAlpha = fill_alpha;
-			ctx.fillStyle = colour;
+			ctx.fillStyle = grad;
 			ctx.fill();
-			ctx.globalAlpha = 1;
+
 			ctx.strokeStyle = colour;
-			ctx.lineWidth = 1.5;
+			ctx.lineWidth = 1.75;
+			ctx.lineJoin = "round";
+			ctx.lineCap = "round";
 			ctx.beginPath();
 			for (var k = 0; k < values.length; k++) {
 				var px = x_of(k), py = y_of(values[k]);
 				if (k === 0) { ctx.moveTo(px, py); } else { ctx.lineTo(px, py); }
 			}
 			ctx.stroke();
+
+			// A dot on the newest sample. Without it the line ends somewhere and the
+			// eye has to find where; with it, the newest value is a place.
+			if (values.length > 0) {
+				var lx = x_of(values.length - 1);
+				var ly = y_of(values[values.length - 1]);
+				ctx.fillStyle = colour;
+				ctx.beginPath();
+				ctx.arc(lx, ly, 2.4, 0, Math.PI * 2);
+				ctx.fill();
+				// A soft halo around it, sized in device pixels so it does not become
+				// a hard-edged circle on a HiDPI screen.
+				var halo = 5 * (global.devicePixelRatio || 1);
+				var hg = ctx.createRadialGradient(lx, ly, 0, lx, ly, halo);
+				hg.addColorStop(0, colour_with_alpha(this, colour, 0.5));
+				hg.addColorStop(1, colour_with_alpha(this, colour, 0));
+				ctx.fillStyle = hg;
+				ctx.beginPath();
+				ctx.arc(lx, ly, halo, 0, Math.PI * 2);
+				ctx.fill();
+			}
 		}
 
 		area(s.down, down_col, 0.18);
 		area(s.up, up_col, 0.12);
 	};
+
+	// colour_with_alpha rebuilds a colour from the CSS custom properties with a
+	// different alpha. A canvas cannot fade a colour it was given as an opaque
+	// string, and rgba(...) with a token in it would be a string poke at a colour.
+	//
+	// It handles the two forms that actually appear in tokens.css: #rgb and #rrggbb.
+	// Anything else comes back unchanged, which would look wrong rather than throw,
+	// and adding a hex parser for the sake of it is a dependency the chart does not
+	// need for six colours.
+	function colour_with_alpha(chart, colour, alpha) {
+		var hex = (colour || "").replace("#", "");
+		if (hex.length === 3) {
+			hex = hex.charAt(0) + hex.charAt(0) + hex.charAt(1) + hex.charAt(1)
+				+ hex.charAt(2) + hex.charAt(2);
+		}
+		if (hex.length !== 6 || !/^[0-9a-fA-F]{6}$/.test(hex)) {
+			return colour;
+		}
+		var r = parseInt(hex.substring(0, 2), 16);
+		var g = parseInt(hex.substring(2, 4), 16);
+		var b = parseInt(hex.substring(4, 6), 16);
+		return "rgba(" + r + "," + g + "," + b + "," + alpha + ")";
+	}
 
 	global.FluxChart = {
 		create: function (canvas) { return new Chart(canvas); },

@@ -79,6 +79,8 @@ pub fn app_manifest() services.Service {
 				'Clear the finished and failed history.'),
 			cmd(app_name + '.set_item_options', 'ItemOptionsParams', 'map',
 				'Set per-download aria2 options. Answers with the options aria2 refused.'),
+			cmd(app_name + '.details', 'GidParams', 'Detail',
+				'The full record for one download: pieces, connection count, files, trackers, mirror state.'),
 
 			// ---- Phase 3: settings.
 			cmd(app_name + '.get_settings', services.no_params, 'SettingsView',
@@ -136,7 +138,13 @@ fn app_ts_types() []string {
 		'\t\tnum_waiting: number;',
 		'\t\tnum_stopped: number;',
 		'\t}',
-		'\texport interface Download {',
+		// The tick carries the row fields the UI shows, and the DETAIL fields the details
+		// dialog shows. Two sets, because a row is a summary and the record is not: a row
+		// has room for eight fields, and a download has more than twenty.
+		//
+		// The unit of each is decided in platform/app.v's download_from, which is where a
+		// value stops being an aria2 answer and becomes something a frame renders.
+		'\t\texport interface Download {',
 		'\t\tgid: string;',
 		'\t\tname: string;',
 		'\t\tstatus: string;',
@@ -150,6 +158,23 @@ fn app_ts_types() []string {
 		'\t\tseeder: boolean;',
 		'\t\tdir: string;',
 		'\t\terror: string;',
+		'\t}',
+		// Detail is everything the row does not have, in the order the dialog
+		// shows it: identity, then where the bytes are, then what aria2 is doing
+		// with them, then the parts that only exist for a torrent.
+		'\texport interface Detail {',
+		'\t\tgid: string;',
+		'\t\tdir: string;',
+		'\t\tuploaded: string;',
+		'\t\tconnections: string;',
+		'\t\tnum_pieces: number;',
+		'\t\tpiece_length: string;',
+		'\t\tverified_length: string;',
+		'\t\tinfo_hash: string;',
+		'\t\tnum_seeders: number;',
+		'\t\tnum_leechers: number;',
+		'\t\ttrackers: string[];',
+		'\t\tfiles: string[];',
 		'\t}',
 		'\texport interface Notice {',
 		'\t\tkind: string;',

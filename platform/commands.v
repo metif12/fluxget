@@ -216,6 +216,9 @@ pub fn default_backend(app &App) map[string]Handler {
 	backend[app_name + '.set_item_options'] = fn [mut a] (params string) !string {
 		return a.set_item_options_json(params)
 	}
+	backend[app_name + '.details'] = fn [mut a] (params string) !string {
+		return a.details_json(params)
+	}
 
 	// Phase 3: settings. get_settings needs no lock and mutates nothing, so it
 	// takes the App by value - a read that cannot change what it reads is worth

@@ -345,6 +345,17 @@ pub fn download_from(s rpc.Status) Download {
 	}
 }
 
+// detail_from is gone, and the reason matters:
+//
+// The first attempt put detail fields on the Download struct, which meant every
+// tick carried the tracker list and the file list of every row in the queue - two
+// aria2 calls per download, per second, for a dialog that is open for one row at a
+// time. It also meant a `verified_length` and `num_seeders` field on a plain HTTP
+// download, which renders "0 seeders" for something that has no peers at all.
+//
+// So the details are their own command, `fluxget.details`, fetched when a row is
+// clicked. One row, once, and the tick stays the size of a summary.
+
 // health_from builds the health payload.
 //
 // Its five fields are the ones Phase 0 shipped and the existing frontend card

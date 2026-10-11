@@ -28,6 +28,7 @@
 module main
 
 import os
+import encoding.base64
 
 // rel_root is where the frontend lives, relative to the working directory.
 const rel_root = 'frontend'
@@ -134,6 +135,142 @@ fn escape_for_script(js string) string {
 	return js.replace('</script', '<\\/script')
 }
 
+// inline_fonts rewrites every `url(relative/path.woff2)` in a CSS body into a
+// data: URI.
+//
+// WHY THIS EXISTS AND WHY IT IS NOT OPTIONAL
+//
+// webview_set_html gives the document no origin, so a relative request from it
+// resolves to nothing. That is the whole reason tools/pack exists for stylesheets
+// and scripts, and a font is the same problem with a WORSE symptom: a missing
+// <script src> gives a dead UI, while a missing font gives the system face, which
+// looks fine and ships. The Persian font is the one that matters - a Persian
+// session that silently falls back to Segoe UI has the wrong ی and ک, and reads
+// as slightly wrong in a way nobody can name or report.
+//
+// The CSP allows it: the framework's default policy is `font-src 'self' data:`.
+//
+// Only URLs that resolve to a real file under the frontend root are rewritten.
+// Anything else is left exactly as it was - a `url(#id)` SVG reference, an
+// absolute http URL, a data: URI already there - because guessing at a URL the
+// packer has never seen is how a build step starts breaking working documents.
+//
+// Paths are resolved relative to the CSS file's own directory, so a stylesheet in
+// css/ reaches fonts/ with ../fonts/.
+// resolve_upwards joins a base directory and a relative path, resolving `.` and
+// `..` segments by hand.
+//
+// WHY BY HAND, when os.norm_path exists
+//
+// os.norm_path QUOTES a `..` segment. Given `css/../fonts/x.woff2` it returns
+// `css\"..\fonts\x.woff2` — a path with a stray quote in it that cannot exist, and
+// that read_bytes reports as "failed to open file" with nothing about why. Every
+// font reference in this project is `../fonts/`, so the first version of
+// inline_fonts silently disabled all of them while reporting success.
+//
+// os.join_path is out for the same reason, and os.read_bytes will not open a path
+// containing `..` at all. So the three stdlib functions this would normally be one
+// call to all mishandle the case, and doing it here is the honest answer: the
+// rules are five lines and they are testable.
+//
+// A pure function, so a test can check the awkward cases without a filesystem.
+fn resolve_upwards(base string, rel string) string {
+	mut segments := []string{}
+	for raw in (base + '/' + rel).split('/') {
+		for part in raw.split('\\') {
+			if part == '' || part == '.' {
+				continue
+			}
+			if part == '..' {
+				if segments.len > 0 {
+					segments.delete_last()
+				}
+				continue
+			}
+			segments << part
+		}
+	}
+	return segments.join('/')
+}
+
+fn inline_fonts(css string, root string, rel string) string {
+	// css_dir is the stylesheet's own directory, because a relative url() in a CSS
+	// file is relative to THAT file and not to the frontend root. Getting it wrong
+	// makes every reference a miss, and every miss is silent.
+	css_dir := os.dir(os.join_path(root, rel))
+	mut out := css
+	mut i := 0
+	for i < out.len {
+		// `index_after` returns the index OF the match, not after it, so the start
+		// of `url(` is what comes back and `url('.len` positions us at the first
+		// character inside the parens. (Verified rather than assumed: a scratch
+		// program, because the name reads the other way round.)
+		start := out.index_after('url(', i) or { break }
+		open := start + 'url('.len
+		mut close := open
+		// The opening quote has to be skipped on BOTH ends. The first version of
+		// this advanced `close` past it and left `open` where it was, so every
+		// extracted path was `"../fonts/x.woff2` with a stray quote on the front —
+		// which is a path nothing can open, and which read_bytes reported as
+		// "failed to open file" with no hint about the quote. The symptom was
+		// identical to the resolve_upwards bug that came with it, and it took a
+		// debug print of the path itself to see it.
+		mut path_start := open
+		mut quote := u8(`"`)
+
+		if close < out.len && (out[close] == `"` || out[close] == `'`) {
+			quote = out[close]
+			path_start = close + 1
+			close++
+		}
+		for close < out.len && out[close] != quote && out[close] != `)` {
+			close++
+		}
+		if close >= out.len {
+			break
+		}
+		path := out[path_start..close]
+		mut after := close
+		if close < out.len && out[close] == quote {
+			after++
+		}
+		if path.starts_with('data:') || path.starts_with('#')
+			|| path.starts_with('http://') || path.starts_with('https://') {
+			i = after
+			continue
+		}
+		// The path is resolved by resolve_upwards and NOT by os.norm_path or
+		// os.join_path, both of which quote a `..` segment into a path that cannot
+		// exist. See resolve_upwards for the full story.
+		disk := if os.is_abs_path(path) {
+			path
+		} else {
+			resolve_upwards(css_dir, path)
+		}
+		bytes := os.read_bytes(disk) or {
+			i = after
+			continue
+		}
+		mime := if path.ends_with('.woff2') {
+			'font/woff2'
+		} else if path.ends_with('.woff') {
+			'font/woff'
+		} else if path.ends_with('.ttf') {
+			'font/ttf'
+		} else {
+			'application/octet-stream'
+		}
+		// Base64, because woff2 is binary and percent-escaping it would triple its
+		// size. 33% overhead on 120 KB is the price of having no origin to fetch
+		// from, and it is smaller than the alternative of shipping a second
+		// transport for the release build.
+		repl := 'url("data:${mime};base64,${base64.encode(bytes)}")'
+		out = out[..start] + repl + out[after..]
+		i = start + repl.len
+	}
+	return out
+}
+
 // attr_for is the attribute that references an asset of this kind.
 fn attr_for(kind string) string {
 	return if kind == 'css' { 'href' } else { 'src' }
@@ -150,7 +287,13 @@ fn inline_one(html string, a Asset, root string) string {
 		eprintln('pack: cannot read ' + path + ': ' + err.msg())
 		exit(1)
 	}
-	body := if a.kind == 'js' { escape_for_script(raw) } else { raw }
+	// A stylesheet is also the entry point for the fonts it references, so the
+	// fonts go with it or they will not load at all.
+	body := if a.kind == 'css' {
+		inline_fonts(raw, root, a.rel)
+	} else {
+		escape_for_script(raw)
+	}
 	repl := if a.kind == 'css' {
 		'<style>\n' + body + '\n</style>'
 	} else {
@@ -192,6 +335,14 @@ fn main() {
 		Asset{
 			kind: 'css'
 			rel:  'css/app.css'
+		},
+		// The fonts, AFTER base and app, because `url(../fonts/x.woff2)` only
+		// appears once fonts.css is inlined and its own references need rewriting -
+		// fonts.css carries no @font-face of its own to lose, but it is the file
+		// index.html names, so it has to be in the list to be inlined at all.
+		Asset{
+			kind: 'css'
+			rel:  'css/fonts.css'
 		},
 		Asset{
 			kind: 'js'

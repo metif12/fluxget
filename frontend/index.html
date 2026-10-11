@@ -2,92 +2,150 @@
 <html lang="fa" dir="rtl" data-theme="dark">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>Fluxget</title>
 <link rel="stylesheet" href="css/tokens.css" />
 <link rel="stylesheet" href="css/base.css" />
 <link rel="stylesheet" href="css/app.css" />
+<link rel="stylesheet" href="css/fonts.css" />
 </head>
 <body>
 <!--
-  Phase 2. Still no framework and no bundler: the CSP is
+  Phase 3's UI, restyled. Still no framework and no bundler: the CSP is
   `script-src 'self' 'unsafe-inline'`, hand-written ES5 is deliberate, and
   tools/pack inlines all three stylesheets and all three scripts into one file for
   production.
 
-  RTL-FIRST, not translated-into-RTL. The document starts lang="fa" dir="rtl"
-  because that is the layout the CSS was written against - logical properties,
-  margin-inline, inset-block - so fa is the design and en is the override. Doing
-  it the other way round is how a localised UI ends up with a mirrored layout
-  bolted onto an LTR one, with the spacing subtly wrong in one language.
+  RTL-FIRST, and MOBILE-FIRST: the document starts lang="fa" dir="rtl" and every
+  rule in base.css is the narrow layout, with the wide ones added by min-width
+  blocks above it. Doing it the other way round is how a localised UI ends up with
+  spacing subtly wrong in one language.
 
   Every user-visible string carries data-i18n, so switching locale is a DOM walk
   rather than a reload. Nothing here has text baked in.
--->
-<div class="app" id="app">
 
-	<header class="topbar">
-		<div class="topbar__mark" aria-hidden="true">
-			<svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
-			</svg>
-		</div>
+  The three panes are TABS below 900px and columns above it. One DOM, one set of
+  rules: the tab bar is hidden at 900px and the panes are all shown then, so the
+  two layouts differ in presentation and not in structure.
+-->
+<div class="app" id="app" data-tab="downloads">
+
+	<div class="shell">
+		<!--
+		  The main sidebar. Categories are the queue's filing system: a set is
+		  created by the user and four defaults ship ("همه", "در حال دانلود",
+		  "متوقف", "پایان‌یافته/ناموفق") built from the rows' own status rather than
+		  from a tag the user has to remember to apply.
+
+		  The distinction is the whole reason there are two kinds here: a DEFAULT
+		  category is derived from state and cannot be deleted, while a NAMED one is
+		  user-owned and can. Putting both in one list would mean a user deleting
+		  "Media" and losing the queue's ability to show finished downloads.
+		-->
+		<aside class="sidebar" id="sidebar">
+			<nav class="sidebar__nav" data-i18n-attr="aria-label:nav.categories">
+				<button class="sidebar__item is-on" type="button" data-cat="all">
+					<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+						stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M4 6h16M4 12h16M4 18h16" />
+					</svg>
+					<span data-i18n="cat.all">all</span>
+					<span class="sidebar__count" id="count-all">0</span>
+				</button>
+				<button class="sidebar__item" type="button" data-cat="active">
+					<span class="sidebar__dot" data-dot="active"></span>
+					<span data-i18n="cat.active">downloading</span>
+					<span class="sidebar__count" id="count-active">0</span>
+				</button>
+				<button class="sidebar__item" type="button" data-cat="waiting">
+					<span class="sidebar__dot" data-dot="waiting"></span>
+					<span data-i18n="cat.waiting">queued</span>
+					<span class="sidebar__count" id="count-waiting">0</span>
+				</button>
+				<button class="sidebar__item" type="button" data-cat="paused">
+					<span class="sidebar__dot" data-dot="paused"></span>
+					<span data-i18n="cat.paused">paused</span>
+					<span class="sidebar__count" id="count-paused">0</span>
+				</button>
+				<button class="sidebar__item" type="button" data-cat="done">
+					<span class="sidebar__dot" data-dot="done"></span>
+					<span data-i18n="cat.done">finished &amp; failed</span>
+					<span class="sidebar__count" id="count-done">0</span>
+				</button>
+			</nav>
+			<div class="sidebar__rule" data-i18n="sidebar.rule"></div>
+			<nav class="sidebar__nav" id="category-list"></nav>
+			<button class="sidebar__add" id="category-add" type="button">
+				<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M12 5v14M5 12h14" />
+				</svg>
+				<span data-i18n="sidebar.new">new category</span>
+			</button>
+		</aside>
+
+		<div class="main">
+			<header class="topbar">
 		<div class="topbar__brand">
-			<div class="topbar__title">Fluxget</div>
-			<div class="topbar__tagline" data-i18n="app.tagline"></div>
+			<span class="topbar__mark" aria-hidden="true">
+				<svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
+				</svg>
+			</span>
+			<span class="topbar__title">Fluxget</span>
 		</div>
 
 		<form class="addbar" id="addform" autocomplete="off">
-			<input class="addbar__input" id="addurl" type="text" spellcheck="false"
-				dir="ltr"
-				data-i18n-attr="placeholder:add.placeholder"
-				data-i18n-attr="aria-label:add.aria" />
-			<button class="addbar__btn" id="addbtn" type="submit" data-i18n="add.button">Add</button>
+			<!--
+			  One box, one destination. It no longer submits on its own: every add
+			  goes through the dialog, so a paste of five URLs is one gesture rather
+			  than five, and the per-download settings are reachable from the same
+			  place the URL is typed. The box is only pre-filled here.
+			-->
+			<span class="addbar__wrap">
+				<svg class="addbar__icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
+					stroke="currentColor" stroke-width="2" stroke-linecap="round"
+					stroke-linejoin="round" aria-hidden="true">
+					<circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" />
+				</svg>
+				<input class="addbar__input" id="addurl" type="text" spellcheck="false" dir="ltr"
+					data-i18n-attr="placeholder:add.placeholder" />
+			</span>
+			<button class="addbar__btn addbar__btn--ghost" id="adddialog" type="button"
+				data-i18n-attr="aria-label:add.advanced" title="">
+				<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M4 6h16M4 12h16M4 18h10" />
+				</svg>
+			</button>
+			<button class="addbar__btn" id="addbtn" type="button" data-i18n="add.button">Add</button>
 		</form>
 
+		<!-- One segmented control for the four things you can toggle, rather than
+		     four loose buttons: they are the same kind of thing and grouping them
+		     says so. The locale button shows the language you would switch TO. -->
 		<div class="tools">
-			<button class="tool" id="localebtn" type="button" title="l">فارسی</button>
-			<button class="tool" id="themebtn" type="button" title="t">◐</button>
-			<button class="tool" id="settingsbtn" type="button" title="s"
-				data-i18n="settings.open">settings</button>
-			<button class="tool" id="helpbtn" type="button" data-i18n-attr="aria-label:shortcuts.title">?</button>
+			<div class="segmented">
+				<button class="tool" id="themebtn" type="button" aria-label="theme">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+						stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+						<path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor" stroke="none" />
+						<circle cx="12" cy="12" r="9" />
+					</svg>
+				</button>
+				<button class="tool" id="localebtn" type="button">فارسی</button>
+				<button class="tool" id="helpbtn" type="button" data-i18n="shortcuts.open">?</button>
+			</div>
+			<button class="tool tool--menu" id="menubtn" type="button"
+				data-i18n-attr="aria-label:menu.title">
+				<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M4 6h16M4 12h16M4 18h16" />
+				</svg>
+			</button>
 		</div>
 	</header>
-
-	<!--
-	  The status row. `data-state` drives the colour, and it is the same three
-	  words base.css used from Phase 0, so nothing new had to be invented for
-	  "this is broken".
-	-->
-	<section class="cards" id="cards">
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.engine">engine</h2>
-			<p class="card__v" id="v-engine">…</p>
-		</article>
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.speed">speed</h2>
-			<p class="card__v" id="v-speed">…</p>
-		</article>
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.queue">queue</h2>
-			<p class="card__v" id="v-queue">…</p>
-		</article>
-		<!-- data-ltr: this card holds a filesystem path, which is always LTR even
-		     inside a Persian sentence. The engine card above deliberately has no
-		     such attribute, because it holds prose. -->
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.aria2">aria2c</h2>
-			<p class="card__v" id="v-aria2" data-ltr>…</p>
-		</article>
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.transport">transport</h2>
-			<p class="card__v" id="v-transport">…</p>
-		</article>
-		<article class="card">
-			<h2 class="card__k" data-i18n="card.bridge">bridge</h2>
-			<p class="card__v" id="v-bridge">…</p>
-		</article>
-	</section>
 
 	<!--
 	  The setup screen, shown only when the engine has no binary. Kept in the DOM
@@ -103,128 +161,261 @@
 	</section>
 
 	<main class="panes">
-		<section class="pane pane--queue">
+		<section class="pane pane--queue is-shown" id="pane-downloads" data-pane="downloads">
+			<!-- The pane header, with the search box in it.
+			     The queue's own tools move to the menu: a pane header holding three
+			     queue actions, a count, and a search box is a header that collapses
+			     at a narrow window and hides the search behind it. -->
 			<div class="pane__head">
 				<h2 class="pane__title" data-i18n="pane.downloads">downloads</h2>
-				<!-- Global switches, next to the queue they act on. They are
-				     buttons rather than shortcuts on purpose: pausing EVERYTHING is
-				     not a thing to do by accident while reaching for a single row. -->
-				<span class="pane__tools">
-					<button class="act" id="pauseall" type="button" data-i18n="queue.pauseall">pause all</button>
-					<button class="act" id="resumeall" type="button" data-i18n="queue.resumeall">resume all</button>
-					<button class="act" id="clearhistory" type="button" data-i18n="queue.clear">clear history</button>
-				</span>
+				<!--
+				  Search. One box for the whole queue, and it searches everything the
+				  row holds: name, directory, gid, and aria2's error text. It is
+				  here rather than in a panel because a search box that is not
+				  always visible is a search box nobody uses.
+
+				  The shortcut is the same one the browser would take, so Ctrl+F (or
+				  /) reaches it without a gesture; the search itself is client-side,
+				  which is the honest shape — the data is already in the tick, there
+				  is no server to ask, and a round trip per keystroke would be slower
+				  than the typing.
+				-->
+				<div class="search">
+					<svg class="search__icon" viewBox="0 0 24 24" width="14" height="14" fill="none"
+						stroke="currentColor" stroke-width="2" stroke-linecap="round"
+						stroke-linejoin="round" aria-hidden="true">
+						<circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" />
+					</svg>
+					<input class="search__input" id="search" type="search" placeholder=""
+						data-i18n-attr="placeholder:search.placeholder;aria-label:search.placeholder"
+						autocomplete="off" spellcheck="false" />
+					<kbd class="search__kbd" id="search-kbd">/</kbd>
+				</div>
+				<!-- The count of the rows in view, which is not the count in the
+				     queue when a search is narrowing it. -->
 				<span class="pane__count" id="queue-count">0</span>
 			</div>
+
+			<!-- The global hits. Two words of context each, because a hit that says
+			     "found 12 in 340" does not tell anyone WHERE. -->
+			<p class="search__hits" id="search-hits" hidden></p>
 			<!--
-			  The empty message is a SIBLING of #rows, not a child of it.
+			  The empty state is a SIBLING of #rows, not a child of it.
 			  renderRows clears #rows wholesale to rebuild it, so anything living
 			  in there is destroyed on the first re-render - and the next call
-			  then throws on a null reference, which is a miserable bug to chase
-			  from a symptom in the status row.
+			  then throws on a null reference.
 			-->
-			<p class="empty" id="empty" data-i18n="empty.queue"></p>
+			<p class="empty" id="empty">
+				<svg class="empty__art" viewBox="0 0 48 48" width="44" height="44" fill="none"
+					stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+					stroke-linejoin="round" aria-hidden="true">
+					<path d="M24 6v20" /><path d="M14 18l10 10 10-10" />
+					<path d="M8 40h32" /><path d="M16 46h16" opacity="0.4" />
+				</svg>
+				<span data-i18n="empty.queue"></span>
+			</p>
 			<div class="rows" id="rows" role="list"></div>
 		</section>
 
-		<div class="pane-column">
-			<section class="pane pane--chart">
-				<div class="pane__head">
-					<h2 class="pane__title" data-i18n="pane.speed">speed</h2>
-				</div>
-				<canvas class="chart" id="chart" aria-hidden="true"></canvas>
-				<div class="legend">
-					<span class="legend__key">
-						<span class="legend__swatch legend__swatch--down"></span>
-						<span class="legend__value" id="legend-down">0 B/s</span>
-					</span>
-					<span class="legend__key">
-						<span class="legend__swatch legend__swatch--up"></span>
-						<span class="legend__value" id="legend-up">0 B/s</span>
-					</span>
-				</div>
-			</section>
-
-			<section class="pane pane--log">
-				<div class="pane__head">
-					<h2 class="pane__title" data-i18n="pane.log">engine log</h2>
-					<span class="pane__count" id="log-count">0</span>
-				</div>
-				<!-- aria2's stderr, newest first. The ring buffer on the native
-				     side keeps the last 200 lines, so this is scrollback and not
-				     a file. -->
-				<pre class="log" id="log" dir="ltr"></pre>
-			</section>
-		</div>
+		<section class="pane pane--chart" id="pane-chart" data-pane="chart">
+			<div class="pane__head">
+				<h2 class="pane__title" data-i18n="pane.speed">speed</h2>
+			</div>
+			<canvas class="chart" id="chart" aria-hidden="true"></canvas>
+			<div class="legend">
+				<span class="legend__key">
+					<span class="legend__swatch legend__swatch--down"></span>
+					<span class="legend__value" id="legend-down">0 B/s</span>
+				</span>
+				<span class="legend__key">
+					<span class="legend__swatch legend__swatch--up"></span>
+					<span class="legend__value" id="legend-up">0 B/s</span>
+				</span>
+			</div>
+		</section>
 	</main>
+
+		<!--
+		  The tab bar. Hidden at 900px by base.css, where the panes are all visible,
+	  so it is a control that does nothing on the shipped window and matters the
+	  moment the window is narrower. The badge is how you know something finished
+	  without switching tabs.
+
+	  TWO tabs, not three. The engine log used to be the third; it lives in
+	  Settings > Developer now, because what aria2 says on stderr is not something
+	  a user should have to find a tab for.
+	-->
+	<nav class="tabbar" id="tabbar" role="tablist">
+		<button class="tab" id="tab-downloads" type="button" role="tab" data-tab="downloads"
+			aria-selected="true" aria-controls="pane-downloads">
+			<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+				stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M12 3v12" /><path d="M7 10l5 5 5-5" /><path d="M4 21h16" />
+			</svg>
+			<span data-i18n="pane.downloads">downloads</span>
+			<span class="tab__badge" id="badge-active" hidden>0</span>
+		</button>
+		<button class="tab" id="tab-chart" type="button" role="tab" data-tab="chart"
+			aria-selected="false" aria-controls="pane-chart">
+			<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+				stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+				<path d="M3 17l5-6 4 3 5-7 4 4" />
+			</svg>
+			<span data-i18n="pane.speed">speed</span>
+		</button>
+	</nav>
+		</div>
+	</div>
 
 	<div class="toasts" id="toasts" aria-live="polite"></div>
 
-	<!-- Settings.
-	     A <form> so the fields are grouped and so Enter submits, and a dialog
-	     rather than a pane because a limit is something you set once and then
-	     stop looking at. The numbers are bytes per second as RAW integers - the
-	     "MiB/s" a user thinks in is converted on the way in and back on the way
-	     out, so the stored value is the same one aria2 holds. -->
-	<div class="dialog" id="settings" hidden role="dialog" aria-modal="true">
-		<form class="dialog__panel" id="settingsform">
+	<!--
+	  The menu. Every command that is not a per-row action lives here, and it is
+	  deliberately a single list rather than a toolbar: a header with nine buttons
+	  in it is a header nobody reads, and this one already has the add box and two
+	  toggles in it.
+
+	  Anything here that is destructive is separated from the settings by a rule,
+	  and the rules are the whole visual structure.
+	-->
+	<div class="menu" id="menu" hidden>
+		<div class="menu__group">
+			<h2 class="menu__label" data-i18n="menu.group.downloads">the queue</h2>
+			<button class="menu__item" id="menu-pauseall" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<rect x="6" y="5" width="4" height="14" /><rect x="14" y="5" width="4" height="14" />
+				</svg>
+				<span data-i18n="queue.pauseall">pause all</span>
+			</button>
+			<button class="menu__item" id="menu-resumeall" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M7 4l12 8-12 8z" />
+				</svg>
+				<span data-i18n="queue.resumeall">resume all</span>
+			</button>
+			<button class="menu__item menu__item--danger" id="menu-clearhistory" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" />
+				</svg>
+				<span data-i18n="queue.clear">clear history</span>
+			</button>
+		</div>
+
+		<div class="menu__group">
+			<h2 class="menu__label" data-i18n="menu.group.app">the app</h2>
+			<button class="menu__item" id="menu-settings" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="3" />
+					<path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2" />
+				</svg>
+				<span data-i18n="settings.open">settings</span>
+			</button>
+			<button class="menu__item" id="menu-developer" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<path d="M8 6l-5 6 5 6M16 6l5 6-5 6" />
+				</svg>
+				<span data-i18n="settings.dev.title">developer</span>
+			</button>
+			<button class="menu__item" id="menu-theme" type="button">
+				<span data-i18n="theme.toggle">theme</span>
+			</button>
+			<button class="menu__item" id="menu-locale" type="button">
+				<span id="menu-locale-name">English</span>
+			</button>
+			<button class="menu__item" id="menu-help" type="button">
+				<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+					<circle cx="12" cy="12" r="9" /><path d="M9.5 9a2.5 2.5 0 1 1 3.4 2.3c-.6.3-.9 1-.9 1.7" />
+					<circle cx="12" cy="17" r="0.6" fill="currentColor" />
+				</svg>
+				<span data-i18n="shortcuts.title">keyboard shortcuts</span>
+			</button>
+		</div>
+	</div>
+
+	<!--
+	  Add. A DIALOG, not an inline form, for one reason that only shows up in use:
+	  a paste of ten URLs, or a magnet plus a magnet, needs a place to show what
+	  will be added BEFORE it is added. The box in the header drafts; this
+	  confirms.
+
+	  Simple mode is the textarea and the add button. Advanced adds the settings
+	  that apply to this batch: where to put the files, what to call them, how many
+	  connections, and what limit. The two are one form with one group hidden,
+	  rather than two dialogs, so the mode switch is instant and the state cannot
+	  disagree with itself.
+	-->
+	<div class="dialog" id="add-dialog" hidden role="dialog" aria-modal="true">
+		<form class="dialog__panel dialog__panel--wide" id="addform-full">
 			<div class="dialog__head">
-				<h2 class="dialog__title" data-i18n="settings.title">Settings</h2>
-				<span class="dialog__path" id="settings-path" dir="ltr"></span>
+				<h2 class="dialog__title" data-i18n="add.title">Add downloads</h2>
+				<div class="segmented segmented--sm" role="group" data-i18n-attr="aria-label:add.mode">
+					<button class="tool tool--on" id="mode-simple" type="button" data-i18n="add.mode.simple">simple</button>
+					<button class="tool" id="mode-advanced" type="button" data-i18n="add.mode.advanced">advanced</button>
+				</div>
 			</div>
 
-			<fieldset class="fieldset">
-				<legend class="fieldset__legend" data-i18n="settings.legend.limits">limits</legend>
-				<div class="grid">
-					<label class="field">
-						<span class="field__k" data-i18n="settings.max_concurrent">concurrent downloads</span>
-						<input class="field__v" id="set-max_concurrent" type="number" min="1" max="100" step="1" />
-					</label>
-					<label class="field">
-						<span class="field__k" data-i18n="settings.max_per_server">connections each</span>
-						<input class="field__v" id="set-max_per_server" type="number" min="1" max="16" step="1" />
-					</label>
-					<label class="field">
-						<span class="field__k" data-i18n="settings.split">split</span>
-						<input class="field__v" id="set-split" type="number" min="1" max="16" step="1" />
-					</label>
-					<label class="field">
-						<span class="field__k" data-i18n="settings.min_split_size">min split size (bytes)</span>
-						<input class="field__v" id="set-min_split_size" type="number" min="1024" step="1024" />
-					</label>
-					<label class="field">
-						<span class="field__k" data-i18n="settings.download_limit">download limit (bytes/s, 0 = no limit)</span>
-						<input class="field__v" id="set-download_limit" type="number" min="0" step="1024" />
-					</label>
-					<label class="field">
-						<span class="field__k" data-i18n="settings.upload_limit">upload limit (bytes/s, 0 = no limit)</span>
-						<input class="field__v" id="set-upload_limit" type="number" min="0" step="1024" />
-					</label>
-				</div>
-			</fieldset>
+			<!-- Clipboard detection. The browser will not read the clipboard without
+			     a gesture, so this is a button and not an auto-fill: a dialog that
+			     silently reads the pasteboard on open is a dialog that gets closed
+			     in suspicion. -->
+			<div class="clipboard">
+				<button class="act act--wide" id="clipboard-read" type="button" data-i18n="add.clipboard">read the clipboard</button>
+				<span class="clipboard__hint" id="clipboard-hint" data-i18n="add.clipboard.hint"></span>
+			</div>
 
-			<fieldset class="fieldset">
-				<legend class="fieldset__legend" data-i18n="settings.legend.place">files</legend>
+			<label class="field">
+				<span class="field__k" data-i18n="add.uris.long">one address per line — url, magnet, or a path to a .torrent</span>
+				<textarea class="field__v field__v--area" id="add-uris" rows="5" dir="ltr"
+					spellcheck="false" data-i18n-attr="placeholder:add.uris.placeholder"></textarea>
+			</label>
+
+			<!-- The picker. Hidden until the clipboard or the box hold more than one
+			     address, because a checkbox list of one is a control that does
+			     nothing. -->
+			<div class="picker" id="picker" hidden>
+				<div class="picker__bar">
+					<span class="picker__count" id="picker-count"></span>
+					<button class="act act--tiny" id="picker-all" type="button" data-i18n="add.pick.all">all</button>
+					<button class="act act--tiny" id="picker-none" type="button" data-i18n="add.pick.none">none</button>
+				</div>
+				<!-- One row per detected address, each with its own kind badge: a
+				     magnet, a torrent path and a URL are three different things and
+				     mixing them up is how the wrong thing gets downloaded. -->
+				<ul class="picker__list" id="picker-list"></ul>
+			</div>
+			<fieldset class="fieldset" id="advanced-fields" hidden>
+				<legend class="fieldset__legend" data-i18n="add.legend.this">for these downloads</legend>
 				<div class="grid">
 					<label class="field field--wide">
-						<span class="field__k" data-i18n="settings.dir">download folder (empty = your Downloads)</span>
-						<input class="field__v field__v--text" id="set-dir" type="text" dir="ltr" spellcheck="false" />
+						<span class="field__k" data-i18n="settings.dir">folder</span>
+						<input class="field__v field__v--text" id="add-dir" type="text" dir="ltr" spellcheck="false" />
+						<!-- A folder guessed from the address's last path segment. It is
+						     an offer, not a setting: one click fills the field above, and
+						     nothing happens if it is ignored. -->
+						<span class="folder-hint" id="folder-hint" hidden>
+							<span data-i18n="add.folder.suggested"></span>
+							<code class="folder-hint__path" id="folder-path"></code>
+							<button class="act act--tiny" id="folder-use" type="button" data-i18n="add.folder.use">use it</button>
+						</span>
+					</label>
 					</label>
 					<label class="field">
-						<span class="field__k" data-i18n="settings.seed_ratio">seed ratio</span>
-						<input class="field__v field__v--text" id="set-seed_ratio" type="text" dir="ltr" />
+						<span class="field__k" data-i18n="add.out">file name</span>
+						<input class="field__v field__v--text" id="add-out" type="text" dir="ltr" spellcheck="false" />
 					</label>
 					<label class="field">
-						<span class="field__k" data-i18n="settings.seed_time">seed time (min, 0 = forever)</span>
-						<input class="field__v field__v--text" id="set-seed_time" type="text" dir="ltr" />
+						<span class="field__k" data-i18n="add.connections">connections each</span>
+						<input class="field__v" id="add-connections" type="number" min="1" max="16" step="1" />
 					</label>
 					<label class="check">
-						<input type="checkbox" id="set-bt_enabled" />
-						<span data-i18n="settings.bt_enabled">BitTorrent</span>
-					</label>
-					<label class="check">
-						<input type="checkbox" id="set-save_session" />
-						<span data-i18n="settings.save_session">remember the queue across restarts</span>
+						<input type="checkbox" id="add-paused" />
+						<span data-i18n="add.paused">add paused</span>
 					</label>
 				</div>
 			</fieldset>
@@ -234,9 +425,187 @@
 			     claiming a limit that is not in force. -->
 			<p class="notes" id="settings-notes" hidden></p>
 
+			<!-- What the last save actually did. Not decoration: a value the engine
+			     refused has to be visible, or the dialog claims a limit that is
+			     not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
 			<div class="dialog__foot">
-				<button class="act act--wide" id="settings-cancel" type="button" data-i18n="settings.cancel">close</button>
-				<button class="act act--go" id="settings-save" type="submit" data-i18n="settings.save">save</button>
+				<button class="act act--wide" id="add-cancel" type="button" data-i18n="settings.cancel">close</button>
+				<button class="act act--go" id="add-submit" type="submit" data-i18n="add.submit">add</button>
+			</div>
+		</form>
+	</div>
+
+	<!--
+	  Details. One dialog, filled from whichever row was clicked.
+	  It exists because the queue row shows the eight fields that fit, and a
+	  download has more: the gid, the directory, the connections in use, the piece
+	  length and count, the verified length, the torrent's tracker list. For
+	  anything but a status check, the row is a summary and this is the record.
+	-->
+	<div class="dialog" id="details" hidden role="dialog" aria-modal="true">
+		<div class="dialog__panel">
+			<div class="dialog__head">
+				<h2 class="dialog__title" id="details-name">—</h2>
+				<button class="dialog__close" id="details-close" type="button" data-i18n="settings.cancel">close</button>
+			</div>
+			<dl class="detail" id="detail-list"></dl>
+			<!-- What the last save actually did. Not a status line for decoration:
+			     a value the engine refused has to be visible, or the dialog is
+			     claiming a limit that is not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
+
+			<!-- What the last save actually did. Not decoration: a value the engine
+			     refused has to be visible, or the dialog claims a limit that is
+			     not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
+			<div class="dialog__foot">
+				<button class="act act--wide" id="details-actions" type="button" data-i18n="details.actions"></button>
+			</div>
+		</div>
+	</div>
+
+	<!-- Settings.
+	     A sidebar so that the sections are FINDABLE rather than one long scroll:
+	     limits, files, and the developer log are three different questions and a
+	     user opening this wants one of them, not a page.
+	     The sidebar is a tablist, and the panels are .settings-page; exactly one
+	     is shown, which is the same pattern the panes use and for the same reason
+	     — it needs no JavaScript to be correct at a wide width. -->
+	<div class="dialog dialog--split" id="settings" hidden role="dialog" aria-modal="true">
+		<form class="dialog__panel dialog__panel--wide" id="settingsform">
+			<div class="dialog__head">
+				<h2 class="dialog__title" data-i18n="settings.title">Settings</h2>
+				<span class="dialog__path" id="settings-path" dir="ltr"></span>
+			</div>
+
+			<div class="settings">
+				<nav class="settings__nav" role="tablist">
+					<button class="settings__navitem is-on" type="button" role="tab"
+						data-page="limits" aria-selected="true">
+						<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M4 6h16M4 12h16M4 18h16" /><circle cx="9" cy="6" r="2" fill="var(--surface)" />
+							<circle cx="15" cy="12" r="2" fill="var(--surface)" />
+							<circle cx="7" cy="18" r="2" fill="var(--surface)" />
+						</svg>
+						<span data-i18n="settings.legend.limits"> Limits </span>
+					</button>
+					<button class="settings__navitem" type="button" role="tab"
+						data-page="files" aria-selected="false">
+						<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M3 7l2 13h14l2-13z" /><path d="M8 7V5a4 4 0 0 1 8 0v2" />
+						</svg>
+						<span data-i18n="settings.legend.place"> Files </span>
+					</button>
+					<button class="settings__navitem" type="button" role="tab"
+						data-page="categories" aria-selected="false">
+						<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z" />
+						</svg>
+						<span data-i18n="settings.legend.categories"> Categories </span>
+					</button>
+					<button class="settings__navitem" type="button" role="tab"
+						data-page="developer" aria-selected="false">
+						<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor"
+							stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+							<path d="M8 6l-5 6 5 6M16 6l5 6-5 6" />
+						</svg>
+						<span data-i18n="settings.dev.title"> Developer </span>
+					</button>
+				</nav>
+
+				<div class="settings__body">
+				<section class="settings-page is-on" data-page="limits">
+					<fieldset class="fieldset">
+						<legend class="fieldset__legend" data-i18n="settings.legend.limits">Limits</legend>
+						<div class="grid">
+							<label class="field">
+								<span class="field__k" data-i18n="settings.max_concurrent">concurrent downloads</span>
+								<input class="field__v" id="set-max_concurrent" type="number" min="1" max="100" step="1" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.max_per_server">connections each</span>
+								<input class="field__v" id="set-max_per_server" type="number" min="1" max="16" step="1" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.split">split</span>
+								<input class="field__v" id="set-split" type="number" min="1" max="16" step="1" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.min_split_size">min split size (bytes)</span>
+								<input class="field__v" id="set-min_split_size" type="number" min="1024" step="1024" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.download_limit">download limit (bytes/s, 0 = no limit)</span>
+								<input class="field__v" id="set-download_limit" type="number" min="0" step="1024" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.upload_limit">upload limit (bytes/s, 0 = no limit)</span>
+								<input class="field__v" id="set-upload_limit" type="number" min="0" step="1024" />
+							</label>
+						</div>
+					</fieldset>
+				</section>
+				<section class="settings-page" data-page="files">
+					<fieldset class="fieldset">
+						<legend class="fieldset__legend" data-i18n="settings.legend.place">Files</legend>
+						<div class="grid">
+							<label class="field field--wide">
+								<span class="field__k" data-i18n="settings.dir">download folder</span>
+								<input class="field__v field__v--text" id="set-dir" type="text" dir="ltr" spellcheck="false" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.seed_ratio">seed ratio</span>
+								<input class="field__v field__v--text" id="set-seed_ratio" type="text" dir="ltr" />
+							</label>
+							<label class="field">
+								<span class="field__k" data-i18n="settings.seed_time">seed time (min, 0 = forever)</span>
+								<input class="field__v field__v--text" id="set-seed_time" type="text" dir="ltr" />
+							</label>
+							<label class="check">
+								<input type="checkbox" id="set-bt_enabled" />
+								<span data-i18n="settings.bt_enabled">BitTorrent</span>
+							</label>
+							<label class="check">
+								<input type="checkbox" id="set-save_session" />
+								<span data-i18n="settings.save_session">remember the queue across restarts</span>
+							</label>
+						</div>
+					</fieldset>
+				</section>
+					<section class="settings-page" data-page="categories">
+						<p class="hint" data-i18n="settings.categories.hint"></p>
+						<ul class="catlist" id="category-list"></ul>
+						<div class="row-add">
+							<input class="field__v field__v--text" id="category-name" type="text"
+								data-i18n-attr="placeholder:settings.categories.new" />
+							<button class="act act--tiny" id="category-add" type="button" data-i18n="settings.categories.add">add</button>
+						</div>
+					</section>
+					<section class="settings-page" data-page="developer">
+						<div class="dev__bar">
+							<span class="hint" data-i18n="settings.dev.hint"></span>
+							<span class="dev__count" id="log-count">0</span>
+						</div>
+						<pre class="log" id="log" aria-live="false"></pre>
+					</section>
+				</div>
+			</div>
+
+			<!-- What the last save actually did. Not a status line for decoration:
+			     a value the engine refused has to be visible, or the dialog is
+			     claiming a limit that is not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
+
+			<!-- What the last save actually did. Not decoration: a value the engine
+			     refused has to be visible, or the dialog claims a limit that is
+			     not in force. -->
+			<p class="notes" id="settings-notes" hidden></p>
+			<div class="dialog__foot">
+				<button class="act act--wide" id="settings-cancel" type="button" data-i18n="settings.cancel">close</button>				<button class="act act--go" id="settings-save" type="submit" data-i18n="settings.save">save</button>
 			</div>
 		</form>
 	</div>
@@ -247,12 +616,13 @@
 	<div class="dialog" id="help" hidden role="dialog" aria-modal="true">
 		<div class="dialog__panel">
 			<div class="dialog__head">
-				<h2 class="dialog__title" data-i18n="shortcuts.title"></h2>
-				<button class="dialog__close" id="helpclose" type="button" data-i18n="shortcuts.close"></button>
+				<h2 class="dialog__title" data-i18n="shortcuts.title">Keyboard shortcuts</h2>
+				<button class="dialog__close" id="helpclose" type="button" data-i18n="shortcuts.close">close</button>
 			</div>
 			<pre class="dialog__body" id="helpbody"></pre>
 		</div>
 	</div>
+
 </div>
 
 <!--

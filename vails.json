@@ -37,7 +37,8 @@
 				"fluxget.pause_all",
 				"fluxget.resume_all",
 				"fluxget.forget_all",
-				"fluxget.set_item_options"
+				"fluxget.set_item_options",
+				"fluxget.details"
 			],
 			"asset_roots": ["frontend"],
 			"platforms": []

@@ -1,0 +1,111 @@
+/* fonts.css — the typefaces, one per language, embedded.
+   No web fonts from a CDN: the vails CSP is `default-src 'self'`, so a font
+   fetched at run time would be blocked in production even though it works in the
+   dev server. These ship WITH the app.
+
+   Which font, and why
+
+     en  Inter            SIL OFL 1.1 — the Latin UI face, the one that reads as
+                          "considered" without shouting. Subset to the Latin range
+                          only, which is 23 KB rather than 300, because the app's
+                          Latin text is a fixed vocabulary of English status words.
+     fa  Vazirmatn        SIL OFL 1.1 — designed for Persian, which is NOT the same
+                          as an Arabic font with Persian digits bolted on. It has
+                          the ی/ک/پ forms that an Arabic-first face lacks or draws
+                          badly, and it is the only face here that was drawn for
+                          the language rather than adapted to it.
+     any JetBrains Mono    SIL OFL 1.1 — for the numbers and the log, because a
+                          proportional face makes a column of byte counts
+                          unreadable and the log is read as a table.
+
+   How they are delivered
+
+     dev       url('../fonts/x.woff2'), served by the vails dev server from
+               frontend/ — a normal relative request.
+     release   tools/pack rewrites each url() into a data: URI, because
+               webview_set_html gives the document no origin and a relative
+               request from it resolves to nothing. That is the whole reason the
+               packer knows about fonts at all.
+
+   `font-display: swap` and not `block`: a window that shows nothing for a
+   hundred milliseconds while a 20 KB local face parses is worse than one that
+   shows the system face for one frame and then corrects itself. There is no
+   network here to wait for, so swap costs nothing and avoids a blank paint.
+
+   Every face below is loaded whether or not its language is active — there are
+   no @font-face conditionals, and the alternative (swapping <link> on locale
+   change) would mean the font arriving a frame after the text does. 120 KB of
+   local faces is the price of switching language without a flash. */
+
+/* ---- Inter, for English ---- */
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("../fonts/inter-latin-400.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Inter";
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url("../fonts/inter-latin-600.woff2") format("woff2");
+}
+
+/* ---- Vazirmatn, for Persian ----
+   The Arabic face covers the letters, the ی and the ک; the Latin face is declared
+   separately so a Persian session can still render an English error message from
+   aria2 without falling back to a system face mid-sentence. Bidi mixing is the
+   normal case in a download manager — "آیا مش `1234abcd` است" — so both faces
+   belong to one family rather than one being a fallback. */
+
+@font-face {
+	font-family: "Vazirmatn";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("../fonts/vazirmatn-arabic-400.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Vazirmatn";
+	font-style: normal;
+	font-weight: 600;
+	font-display: swap;
+	src: url("../fonts/vazirmatn-arabic-600.woff2") format("woff2");
+}
+
+@font-face {
+	font-family: "Vazirmatn";
+	font-style: normal;
+	font-weight: 400;
+	/* The Latin range, declared as its own face so the browser picks it for Latin
+	   codepoints and the Arabic face for Arabic ones, out of the same family. */
+	src: url("../fonts/vazirmatn-latin-400.woff2") format("woff2");
+	/* Verified coverage, quoted from @fontsource's own range for the Inter latin
+	   subset — the same subsetting rule, so the same guarantee: basic Latin,
+	   Latin-1, General Punctuation (which is where … and — live), the two arrows
+	   the speed display uses, and the minus sign. */
+	unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA,
+		U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212,
+		U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---- JetBrains Mono, for numbers and the log ---- */
+
+@font-face {
+	font-family: "JetBrains Mono";
+	font-style: normal;
+	font-weight: 400;
+	font-display: swap;
+	src: url("../fonts/jetbrains-mono-latin-400.woff2") format("woff2");
+}
+
+/* ---- Credentials --------------------------------------------------------
+   Inter, Vazirmatn and JetBrains Mono are all licensed under the SIL Open Font
+   License 1.1, which permits embedding in an application as long as the fonts
+   keep their licence — they are distributed alongside frontend/fonts/ in this
+   repo and their notices are in frontend/fonts/LICENSE.md. */

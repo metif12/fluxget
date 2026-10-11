@@ -1,135 +1,323 @@
-/* base.css — reset, then the Phase 1 window.
-   Phase 2 replaces the layout with the real design system; this exists so the
-   e2e screenshot in tests/e2e_windows is a real UI and not a wireframe. */
+/* base.css — reset, then the app shell.
+   Mobile-first: every rule here is the NARROW layout, and the min-width blocks
+   at the bottom add the wide ones. Writing it the other way round is how a
+   localised UI ends up with a mirrored layout bolted onto an LTR one — with the
+   spacing subtly wrong in one language, and a layout that is the second thing the
+   wide screen sees rather than the first thing the phone sees.
 
-*, *::before, *::after { box-sizing: border-box; }
+   The window is fixed at 1360x880 (vails.json has no resizable option), so the
+   narrow layout is not the shipped one today. It is still written first, for the
+   same reason the CSS has logical properties: the day the window resizes, or the
+   day this runs in something with a phone width, the layout is already correct
+   instead of already wrong. */
+
+/* ---- reset --------------------------------------------------------------
+   FIRST in the file, before anything measures itself. This is what every rule
+   below assumes, and it went missing for a while - the edit that added the
+   scrollbar block below replaced it by accident, and the symptom was a window
+   that sized as if nothing were box-sizing: border-box.
+
+   Without the reset: padding is added to every width the shell sets, so the
+   panes overflow; and `html, body { height: 100% }` is gone, so
+   `.app { height: 100% }` resolves against nothing and the shell collapses to
+   the height of its content.
+
+   It is first for a reason. Nothing else in this file is. */
+
+*, *::before, *::after {
+	box-sizing: border-box;
+}
 
 html, body {
 	height: 100%;
 	margin: 0;
 }
 
+/* ---- scrollbars ---------------------------------------------------------
+   A webview gives you the platform's scrollbar, which is a grey rail from a
+   different operating system. It is the single most visible thing that makes a
+   webview look like a webview, and it costs eleven lines.
+
+   `scrollbar-width` and `color-scheme` handle Firefox and the new Chrome; the
+   ::-webkit- family is what WebView2 actually uses, and the properties overlap,
+   so the whole thing is written twice on purpose rather than feature-detected. */
+
+html {
+	/* This is the switch that tells Chromium to draw dark or light FORM CONTROLS
+	   from the CSS rather than from the user's Windows theme, and it is the reason
+	   the scrollbar colour change does not need a data-theme selector of its own. */
+	color-scheme: dark light;
+}
+
+* {
+	scrollbar-width: thin;
+	scrollbar-color: var(--line-strong) transparent;
+}
+
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+/* A rail that is the background colour rather than transparent, so a scrollbar
+   over a card edge does not show the page through its own ends. */
+::-webkit-scrollbar-track {
+	background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+	background: var(--line-strong);
+	border-radius: var(--r-pill);
+	/* The border is what makes the thumb look inset rather than glued to the
+	   track, and it has to be the track colour or it draws a visible ring. */
+	border: 2px solid var(--bg);
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: var(--text-faint);
+}
+
+/* A horizontal scrollbar exists in exactly one place - the shortcut list in the
+   help dialog - and it should be thinner so it does not compete with the text. */
+::-webkit-scrollbar:horizontal {
+	height: 8px;
+}
+
+::-webkit-scrollbar-corner {
+	background: var(--bg);
+}
+
+/* ---- the shell ---------------------------------------------------------- */
+
 body {
 	background: var(--bg);
 	color: var(--text);
 	font-family: var(--font);
-	font-size: 14px;
+	font-size: var(--text-base);
 	line-height: 1.5;
+	/* The two lines below are what let a phone keyboard open without the layout
+	   jumping, and they cost nothing on desktop. */
+	-webkit-text-size-adjust: 100%;
 	-webkit-font-smoothing: antialiased;
+	text-rendering: optimizeLegibility;
+	/* A theme switch animates the surfaces rather than snapping. WebView2 will
+	   composite this fine; a browser on a slow GPU drops frames, which is why it
+	   is a colour transition and not a layout one. */
+	transition: background-color var(--dur-2) var(--ease-standard),
+		color var(--dur-2) var(--ease-standard);
+	/* The shell scrolls, not the body, so the header can be sticky. */
 	overflow: hidden;
 }
+
+button, input, select, textarea {
+	font: inherit;
+	color: inherit;
+}
+
+/* The focus ring is never removed. vails ADR-0010's reasoning about a keyboard
+   path being the primary path applies here too: a window that can be driven with
+   the keyboard has to show where the keyboard is. */
+:focus { outline: none; }
+:focus-visible {
+	outline: 2px solid var(--focus);
+	outline-offset: 2px;
+	border-radius: var(--r-1);
+}
+
+/* ---- the shell ---------------------------------------------------------- */
 
 .app {
 	display: flex;
 	flex-direction: column;
 	height: 100%;
-	padding: var(--sp-4) var(--sp-6) var(--sp-6);
-	gap: var(--sp-4);
+	/* env() safe areas: a webview on a device with a notch is the only case this
+	   matters for, and it is free to include. */
+	padding: env(safe-area-inset-top) env(safe-area-inset-right)
+		env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* ---- top bar ------------------------------------------------------------ */
+/* ---- header -------------------------------------------------------------
+   Sticky, blurred, and it gives up its title before it gives up its controls:
+   at 390px "Fluxget" is the first thing to go, because the add box and the
+   toggles are the things you actually use. */
 
 .topbar {
 	display: flex;
 	align-items: center;
-	gap: var(--sp-4);
+	gap: var(--sp-3);
 	flex: 0 0 auto;
+	padding: var(--sp-3);
+	border-bottom: 1px solid var(--line);
+	background: var(--glass-bg);
+	-webkit-backdrop-filter: blur(var(--glass)) saturate(140%);
+	backdrop-filter: blur(var(--glass)) saturate(140%);
+	position: relative;
+	z-index: 5;
 }
 
-.topbar__mark { color: var(--accent); display: flex; }
+.topbar__mark {
+	color: var(--accent);
+	display: flex;
+	align-items: center;
+}
 
 .topbar__brand {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
-	flex: 0 0 auto;
-}
-
-.topbar__tagline {
-	font-size: 10px;
-	color: var(--text-faint);
-	white-space: nowrap;
+	min-width: 0;
 }
 
 .topbar__title {
-	font-size: 17px;
-	font-weight: 600;
-	letter-spacing: -0.01em;
+	font-family: var(--font-display);
+	font-size: var(--text-md);
+	font-weight: 650;
+	letter-spacing: var(--track-tight);
 	white-space: nowrap;
 }
+
+.topbar__tagline {
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ---- the add box -------------------------------------------------------- */
 
 .addbar {
 	display: flex;
 	gap: var(--sp-2);
 	flex: 1 1 auto;
-	max-width: 640px;
-	margin-inline-start: auto;
+	min-width: 0;
 }
 
 .addbar__input {
 	flex: 1 1 auto;
 	min-width: 0;
 	padding: var(--sp-2) var(--sp-3);
-	background: var(--surface);
+	background: var(--surface-hi);
 	border: 1px solid var(--line);
-	border-radius: var(--r2);
+	border-radius: var(--r-pill);
 	color: var(--text);
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: var(--text-sm);
+	transition: border-color var(--dur-1) var(--ease-standard),
+		background-color var(--dur-1) var(--ease-standard);
 }
 
+.addbar__input::placeholder { color: var(--text-faint); }
+
 .addbar__input:focus {
-	outline: none;
-	border-color: var(--accent-dim);
-	box-shadow: 0 0 0 2px var(--accent-dim);
+	background: var(--surface);
+	border-color: var(--accent);
 }
 
 .addbar__btn {
 	flex: 0 0 auto;
 	padding: var(--sp-2) var(--sp-4);
-	background: var(--accent);
-	color: #04121b;
+	background: linear-gradient(135deg, var(--accent), var(--accent-2));
+	color: #06121a;
 	border: none;
-	border-radius: var(--r2);
-	font-family: var(--font);
-	font-size: 13px;
-	font-weight: 600;
+	border-radius: var(--r-pill);
+	font-size: var(--text-sm);
+	font-weight: 650;
 	cursor: pointer;
-	transition: opacity var(--t-fast) var(--ease);
+	transition: filter var(--dur-1) var(--ease-standard),
+		transform var(--dur-1) var(--ease-out);
 }
 
-.addbar__btn:disabled { opacity: 0.5; cursor: default; }
+.addbar__btn:hover { filter: brightness(1.08); }
+/* Press feedback. A button that does not move when pressed feels like a label. */
+.addbar__btn:active { transform: scale(0.97); }
+.addbar__btn:disabled { opacity: 0.55; cursor: default; transform: none; }
 
-/* ---- status row --------------------------------------------------------- */
+/* ---- the tools cluster -------------------------------------------------- */
 
+.tools {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	flex: 0 0 auto;
+}
+
+/* A segmented control rather than four loose buttons: the three things you can
+   toggle are the same kind of thing, and grouping them says so. */
+.segmented {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-1);
+	padding: var(--sp-1);
+	background: var(--surface-hi);
+	border: 1px solid var(--line);
+	border-radius: var(--r-pill);
+}
+
+.tool {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 30px;
+	height: 26px;
+	padding: 0 var(--sp-2);
+	background: transparent;
+	border: none;
+	border-radius: var(--r-pill);
+	color: var(--text-dim);
+	font-size: var(--text-sm);
+	font-weight: 600;
+	cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease-standard),
+		color var(--dur-1) var(--ease-standard);
+}
+
+.tool:hover {
+	background: var(--surface-hover);
+	color: var(--text);
+}
+
+.tool:active { transform: scale(0.96); }
+
+/* ---- status cards ------------------------------------------------------ */
+
+/* Two columns at every width, because five one-line statuses stacked vertically
+   is a third of the window and no information. */
 .cards {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
-	gap: var(--sp-3);
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: var(--sp-2);
 	flex: 0 0 auto;
+	padding: var(--sp-2) var(--sp-3) 0;
 }
 
 .card {
 	background: var(--surface);
 	border: 1px solid var(--line);
-	border-radius: var(--r2);
-	padding: var(--sp-3) var(--sp-4);
+	border-radius: var(--r-3);
+	padding: var(--sp-3);
 	min-width: 0;
+	/* The shadow is what lifts it off the background; on the light theme it is
+	   the only separation a card has. */
+	box-shadow: var(--shadow-1);
+	transition: border-color var(--dur-2) var(--ease-standard),
+		box-shadow var(--dur-2) var(--ease-standard);
 }
+
+.card:hover { border-color: var(--line-strong); }
 
 .card__k {
 	margin: 0;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	font-size: var(--text-xs);
+	font-weight: 700;
+	letter-spacing: var(--track-label);
 	text-transform: uppercase;
 	color: var(--text-faint);
 }
 
 .card__v {
-	margin: var(--sp-2) 0 0;
+	margin: var(--sp-1) 0 0;
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: var(--text-sm);
 	font-variant-numeric: tabular-nums;
 	/* clip, not wrap: a status row that reflows every second is unreadable. */
 	white-space: nowrap;
@@ -141,243 +329,326 @@ body {
 .card__v[data-state="warn"] { color: var(--warn); }
 .card__v[data-state="err"]  { color: var(--err); }
 
-/* ---- setup -------------------------------------------------------------- */
+/* ---- setup ------------------------------------------------------------- */
 
 .setup {
 	flex: 0 0 auto;
+	margin: var(--sp-2) var(--sp-3) 0;
 	background: var(--surface);
 	border: 1px solid var(--warn);
-	border-radius: var(--r2);
+	border-radius: var(--r-3);
 	padding: var(--sp-4);
 }
 
 .setup__title {
 	margin: 0 0 var(--sp-2);
-	font-size: 14px;
-	font-weight: 600;
+	font-size: var(--text-base);
+	font-weight: 650;
 	color: var(--warn);
 }
 
-.setup__body { margin: 0 0 var(--sp-3); color: var(--text-dim); }
+.setup__body { margin: 0 0 var(--sp-3); color: var(--text-dim); font-size: var(--text-sm); }
 
 .setup__cmd {
 	display: inline-block;
 	margin: 0;
 	padding: var(--sp-2) var(--sp-3);
-	background: var(--bg);
+	background: var(--surface-hi);
 	border: 1px solid var(--line);
-	border-radius: var(--r1);
+	border-radius: var(--r-2);
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: var(--text-sm);
 	color: var(--accent);
 }
 
-.setup__note { margin: var(--sp-3) 0 0; font-size: 12px; color: var(--text-faint); }
+.setup__note { margin: var(--sp-3) 0 0; font-size: var(--text-sm); color: var(--text-faint); }
+
 .setup__note code { font-family: var(--mono); color: var(--text-dim); }
 
-/* ---- panes -------------------------------------------------------------- */
+/* ---- the panes ---------------------------------------------------------
+   ONE column, and the panes are hidden behind tabs. See app.css for the tab bar
+   and the [data-tab] rule that shows exactly one pane. */
 
 .panes {
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
-	gap: var(--sp-4);
 	flex: 1 1 auto;
 	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	padding: var(--sp-2) var(--sp-3) var(--sp-3);
+	gap: var(--sp-2);
 }
 
 .pane {
-	display: flex;
+	display: none;                 /* the visible one is chosen by data-tab */
 	flex-direction: column;
 	background: var(--surface);
 	border: 1px solid var(--line);
-	border-radius: var(--r2);
+	border-radius: var(--r-3);
 	min-height: 0;
 	overflow: hidden;
+	box-shadow: var(--shadow-1);
 }
+
+.pane.is-shown { display: flex; }
 
 .pane__head {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
 	gap: var(--sp-2);
-	padding: var(--sp-3) var(--sp-4);
+	padding: var(--sp-3);
 	border-bottom: 1px solid var(--line);
 	flex: 0 0 auto;
+	flex-wrap: wrap;
 }
 
 .pane__title {
 	margin: 0;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	font-size: var(--text-xs);
+	font-weight: 700;
+	letter-spacing: var(--track-label);
 	text-transform: uppercase;
 	color: var(--text-faint);
 }
 
+.pane__tools {
+	display: flex;
+	gap: var(--sp-1);
+	flex: 0 0 auto;
+	/* Pushed to the far end of the header on every width, so the actions live in
+	   the same place whether the title is long or short. */
+	margin-inline-start: auto;
+}
+
 .pane__count {
 	font-family: var(--mono);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	color: var(--text-faint);
 	font-variant-numeric: tabular-nums;
 }
+
+/* ---- the queue --------------------------------------------------------- */
 
 .rows {
 	flex: 1 1 auto;
 	overflow: auto;
+	overscroll-behavior: contain;
+	/* The momentum scroll is what makes a long queue feel native; a webview
+	   without it scrolls like a desktop frame and feels wrong on touch. */
+	-webkit-overflow-scrolling: touch;
 	padding: var(--sp-2);
 }
 
 .empty {
-	/* A sibling of .rows, not a child: renderRows clears .rows wholesale. */
 	margin: 0;
-	padding: var(--sp-6) var(--sp-4);
+	padding: var(--sp-8) var(--sp-4);
 	text-align: center;
 	color: var(--text-faint);
-	flex: 0 0 auto;
 }
 
-/* `hidden` must win over the block layout above, or the empty message can never
-   be hidden at all. */
+.empty__art {
+	display: block;
+	margin: 0 auto var(--sp-4);
+	color: var(--line-strong);
+}
+
 .empty[hidden] { display: none; }
 
-/* ---- a queue row -------------------------------------------------------- */
-
-.row {
-	padding: var(--sp-3);
-	border-radius: var(--r2);
-	border: 1px solid transparent;
-}
-
-.row + .row { margin-top: var(--sp-1); }
-.row:hover { background: var(--surface-hi); }
-
-/* A hairline down the left, coloured by status. Cheaper to read at a glance
-   than a coloured background, and it survives a dark background change. */
-.row { border-inline-start: 3px solid var(--line-strong); }
-.row.is-active   { border-inline-start-color: var(--accent); }
-.row.is-waiting  { border-inline-start-color: var(--text-faint); }
-.row.is-paused   { border-inline-start-color: var(--warn); }
-.row.is-complete { border-inline-start-color: var(--ok); }
-.row.is-error    { border-inline-start-color: var(--err); }
-
-.row__head {
-	display: flex;
-	align-items: baseline;
-	gap: var(--sp-2);
-}
-
-.row__name {
-	flex: 1 1 auto;
-	min-width: 0;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-	font-size: 13px;
-}
-
-.row__badges { display: flex; gap: var(--sp-1); flex: 0 0 auto; }
-
-.badge {
-	padding: 1px var(--sp-2);
-	border-radius: var(--r1);
-	background: var(--surface-hi);
-	border: 1px solid var(--line);
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--text-dim);
-	max-width: 220px;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
-
-.badge[data-kind="torrent"] { color: var(--accent); border-color: var(--accent-dim); }
-.badge[data-kind="seed"]    { color: var(--ok); }
-.badge[data-kind="err"]     { color: var(--err); border-color: var(--err); }
-
-.row__state {
-	flex: 0 0 auto;
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--text-faint);
-}
-
-.row__track {
-	margin: var(--sp-2) 0 var(--sp-1);
-	height: 4px;
-	background: var(--surface-hi);
-	border-radius: 2px;
-	overflow: hidden;
-}
-
-.row__bar {
-	height: 100%;
-	background: var(--accent);
-	border-radius: 2px;
-	transition: width var(--t) var(--ease);
-}
-
-.row.is-complete .row__bar { background: var(--ok); }
-.row.is-error    .row__bar { background: var(--err); }
-
-.row__foot {
-	display: flex;
-	gap: var(--sp-4);
-	font-family: var(--mono);
-	font-size: 11px;
-	color: var(--text-dim);
-	font-variant-numeric: tabular-nums;
-}
-
-.row__pct  { margin-inline-start: auto; }
-.row__eta  { color: var(--text-faint); min-width: 64px; text-align: end; }
-
-/* ---- the log ------------------------------------------------------------ */
+/* ---- the log ----------------------------------------------------------- */
 
 .log {
 	flex: 1 1 auto;
 	margin: 0;
-	padding: var(--sp-3) var(--sp-4);
+	padding: var(--sp-3);
 	overflow: auto;
 	font-family: var(--mono);
-	font-size: 11px;
-	line-height: 1.6;
+	font-size: var(--text-xs);
+	line-height: 1.7;
 	color: var(--text-dim);
 	white-space: pre-wrap;
 	word-break: break-all;
+	-webkit-overflow-scrolling: touch;
 }
 
-/* ---- toasts ------------------------------------------------------------- */
+/* The log's own direction is fixed: aria2 writes English log lines with Windows
+   paths in them, and a Persian document would reorder them. */
+.log { direction: ltr; text-align: start; }
+
+/* ---- toasts ------------------------------------------------------------ */
 
 .toasts {
 	position: fixed;
-	inset-block-end: var(--sp-6);
-	inset-inline-end: var(--sp-6);
+	inset-block-end: calc(var(--sp-4) + 64px);   /* clear of the tab bar */
+	inset-inline: var(--sp-3);
 	display: flex;
 	flex-direction: column;
 	gap: var(--sp-2);
-	z-index: 10;
+	z-index: 30;
+	pointer-events: none;
 }
 
+/* Only the newest few stay on screen. An unbounded toast stack is a second queue,
+   and it covers the queue it is reporting on. */
 .toast {
-	padding: var(--sp-2) var(--sp-4);
-	background: var(--surface-hi);
+	padding: var(--sp-3);
+	background: var(--glass-bg);
+	-webkit-backdrop-filter: blur(var(--glass));
+	backdrop-filter: blur(var(--glass));
 	border: 1px solid var(--line-strong);
-	border-radius: var(--r2);
-	font-size: 12px;
-	max-width: 460px;
-	animation: toast-in var(--t) var(--ease);
+	border-radius: var(--r-3);
+	font-size: var(--text-sm);
+	box-shadow: var(--shadow-2);
+	animation: toast-in var(--dur-3) var(--ease-spring) both;
+	overflow-wrap: anywhere;
 }
 
 .toast[data-kind="finished"] { border-color: var(--ok); }
 .toast[data-kind="failed"]   { border-color: var(--err); color: var(--err); }
 .toast[data-kind="added"]    { border-color: var(--accent); }
+.toast[data-kind="removed"]  { border-color: var(--warn); }
 
 @keyframes toast-in {
-	from { opacity: 0; transform: translateY(4px); }
+	from { opacity: 0; transform: translateY(10px) scale(0.98); }
 	to   { opacity: 1; transform: none; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-	* { transition: none !important; animation: none !important; }
+/* ---- the bottom bar ----------------------------------------------------
+   Mobile only, and it disappears the moment there is room to show all three panes:
+   a tab bar next to three visible panes is a control that does nothing. */
+
+.tabbar {
+	display: flex;
+	flex: 0 0 auto;
+	gap: var(--sp-1);
+	padding: var(--sp-2) var(--sp-2) calc(var(--sp-2) + env(safe-area-inset-bottom));
+	border-top: 1px solid var(--line);
+	background: var(--glass-bg);
+	-webkit-backdrop-filter: blur(var(--glass)) saturate(140%);
+	backdrop-filter: blur(var(--glass)) saturate(140%);
+}
+
+.tab {
+	position: relative;              /* what the badge is positioned against */
+	flex: 1 1 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 2px;
+	/* 44px is the touch-target floor, and it is also a comfortable button for a
+	   keyboard: a 24px tab is a thing you have to aim at. */
+	min-height: 44px;
+	padding: var(--sp-1);
+	background: transparent;
+	border: none;
+	border-radius: var(--r-2);
+	color: var(--text-faint);
+	font-size: var(--text-xs);
+	font-weight: 600;
+	cursor: pointer;
+	transition: color var(--dur-1) var(--ease-standard),
+		background-color var(--dur-1) var(--ease-standard);
+}
+
+.tab:hover { color: var(--text-dim); }
+.tab[aria-selected="true"] { color: var(--accent); background: var(--accent-quiet); }
+
+/* The badge is the one piece of chrome that changes on its own, and it has to be
+   readable at a glance: it is how you know a download finished without switching
+   tabs. A count that appears deserves to appear rather than pop, hence the pop. */
+.tab__badge {
+	position: absolute;
+	inset-block-start: 3px;
+	inset-inline-end: 50%;
+	transform: translateX(13px);
+	min-width: 16px;
+	height: 16px;
+	padding: 0 4px;
+	border-radius: var(--r-pill);
+	background: var(--err);
+	color: #fff;
+	font-family: var(--mono);
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 16px;
+	text-align: center;
+	animation: badge-pop var(--dur-3) var(--ease-spring) both;
+}
+
+@keyframes badge-pop {
+	from { transform: translateX(13px) scale(0.3); opacity: 0; }
+	to   { transform: translateX(13px) scale(1); opacity: 1; }
+}
+
+.tab__badge[hidden] { display: none; }
+
+/* The queue tab's badge is progress rather than an error, so it wears the accent. */
+#badge-active { background: var(--accent); color: #06121a; }
+
+/* ---- the window gets wider -------------------------------------------- */
+
+/* Two columns of cards, and the queue grows: at 540px the panes are still one at a
+   time, because a phone-width pane containing three panes is not a layout. */
+@media (min-width: 540px) {
+	.cards {
+		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+		gap: var(--sp-3);
+		padding-inline: var(--sp-4);
+	}
+
+	.setup { margin-inline: var(--sp-4); }
+	.topbar { padding-inline: var(--sp-4); }
+	.panes { padding-inline: var(--sp-4); }
+	.toasts { inset-inline: var(--sp-4); }
+}
+
+/* From here the tab bar is gone and the panes share the space. */
+@media (min-width: 900px) {
+	.panes {
+		display: grid;
+		grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
+		gap: var(--sp-3);
+		padding-block: var(--sp-3);
+	}
+
+	.pane { display: flex; }
+	.tabbar { display: none; }
+	.toasts { inset-block-end: var(--sp-6); inset-inline-end: var(--sp-6); inset-inline-start: auto; max-width: 460px; }
+
+	/* The chart and the log become the second column, stacked. */
+	.pane-column {
+		display: flex;
+		flex-direction: column;
+		gap: var(--sp-3);
+		min-width: 0;
+		min-height: 0;
+	}
+
+	.pane--chart { flex: 0 0 auto; }
+	.pane--log   { flex: 1 1 auto; min-height: 140px; }
+}
+
+@media (min-width: 1180px) {
+	.panes { grid-template-columns: minmax(0, 1.7fr) minmax(0, 0.9fr); }
+}
+
+/* ---- the topbar, centred and tidy ----------------------------------------
+   The header holds four things and they now sit on one line with a defined order:
+   the brand, the add draft, the search, the toggles. `margin-inline: auto` on the
+   brand is what makes it visually centred against the controls rather than
+   against the edge, and it is an auto margin rather than a text-align because
+   text-align on a flex container does nothing. */
+
+.topbar { flex-wrap: nowrap; }
+
+/* The header is three parts with the middle one flexible, and NO auto margins:
+   in a flex row an `auto` margin distributes the leftover space, which in an RTL
+   document pushes the brand to the far left and leaves the add box next to it.
+   Natural order does the right thing in both directions without a second rule to
+   forget. */
+.topbar__brand { flex: 0 0 auto; }
+
+.addbar {
+	flex: 1 1 auto;
+	min-width: 0;
+	max-width: 520px;
 }

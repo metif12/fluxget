@@ -11,6 +11,8 @@
 // test that kills the runner is not a test.
 module main
 
+import os
+
 // A document shaped like the real one, with extra attributes and an odd
 // attribute order. The old packer built a needle from a regex-shaped string and
 // then searched for it literally, so it matched nothing here and reported "0 of 6
@@ -153,4 +155,97 @@ fn test_inlining_an_absent_asset_leaves_the_document_alone() {
 		rel:  'css/not-here.css'
 	}, '.')
 	assert got == html
+}
+
+// ---- fonts ---------------------------------------------------------------
+
+// The fonts are the reason the packer needs a step a stylesheet inliner normally
+// would not: set_html gives the document no origin, so `url(../fonts/x.woff2)`
+// resolves to nothing, and the failure is a SILENT fallback to the system face.
+// A missing <script src> is a dead UI; a missing font looks fine and ships.
+
+// write_fake_frontend lays a frontend/ tree out exactly as the real one is, so the
+// path the packer resolves is the path the CSS actually uses: a stylesheet in css/
+// reaches fonts/ with ../.
+fn write_fake_frontend(root string) !string {
+	frontend := os.join_path(root, 'frontend')
+	os.mkdir_all(os.join_path(frontend, 'css'))!
+	os.mkdir_all(os.join_path(frontend, 'fonts'))!
+	// Four bytes that are recognisably not text, so a base64 of them is checkable.
+	os.write_bytes(os.join_path(frontend, 'fonts', 'x.woff2'), [u8(0x77), 0x4f, 0x46, 0x32])!
+	return frontend
+}
+
+const css_with_one_font = '@font-face { font-family: "X"; src: url("../fonts/x.woff2") format("woff2"); }'
+
+fn scratch_dir(name string) string {
+	d := os.join_path(os.temp_dir(), name)
+	os.rmdir_all(d) or {}
+	return d
+}
+
+fn test_a_font_url_becomes_a_data_uri() {
+	frontend := write_fake_frontend(scratch_dir('fluxget-pack-fonts-a')) or {
+		assert false, err.msg()
+		return
+	}
+	got := inline_fonts(css_with_one_font, frontend, 'css/fonts.css')
+	assert got.contains('url("data:font/woff2;base64,'), 'the url was not rewritten: ${got}'
+	assert !got.contains('url("../fonts/'), 'a relative url survived: ${got}'
+}
+
+// Every quoting style a stylesheet actually uses, because the CSS that gets packed
+// one day will not be the CSS I wrote today.
+fn test_all_three_url_quotings_are_rewritten() {
+	frontend := write_fake_frontend(scratch_dir('fluxget-pack-fonts-b')) or {
+		assert false, err.msg()
+		return
+	}
+	for quoted in ['url("../fonts/x.woff2")', "url('../fonts/x.woff2')", 'url(../fonts/x.woff2)'] {
+		got := inline_fonts(quoted, frontend, 'css/fonts.css')
+		assert got.contains('data:font/woff2'), '${quoted} was not rewritten: ${got}'
+		assert !got.contains('../fonts/x.woff2'), '${quoted} left the original behind: ${got}'
+	}
+}
+
+// A URL the packer has never seen is left exactly as it is. Guessing at one is how
+// a build step starts breaking working documents.
+fn test_urls_the_packer_does_not_own_are_left_alone() {
+	frontend := write_fake_frontend(scratch_dir('fluxget-pack-fonts-c')) or {
+		assert false, err.msg()
+		return
+	}
+	for kept in [
+		'url(data:font/woff2;base64,AAAA)',
+		'url(#theGradient)',
+		'url(https://example.com/x.woff2)',
+		'url(../fonts/missing.woff2)',
+	] {
+		got := inline_fonts(kept, frontend, 'css/fonts.css')
+		assert got == kept, '${kept} was changed to ${got}'
+	}
+}
+
+// The relative path is from the CSS file's own directory, which is how fonts.css in
+// css/ reaches fonts/. Resolving from the frontend root instead would make every
+// font reference a miss, and every miss is silent.
+fn test_the_path_is_resolved_from_the_css_files_own_directory() {
+	frontend := write_fake_frontend(scratch_dir('fluxget-pack-fonts-d')) or {
+		assert false, err.msg()
+		return
+	}
+	got := inline_fonts('url("fonts/x.woff2")', frontend, 'x.css')
+	assert got.contains('data:font/woff2'), 'a stylesheet at the root should reach fonts/ directly: ${got}'
+}
+
+fn test_the_mime_type_follows_the_extension() {
+	frontend := write_fake_frontend(scratch_dir('fluxget-pack-fonts-e')) or {
+		assert false, err.msg()
+		return
+	}
+	os.write_bytes(os.join_path(frontend, 'fonts', 'x.ttf'), [u8(1), 2, 3])!
+	for pair in [['.woff2', 'font/woff2'], ['.ttf', 'font/ttf']] {
+		got := inline_fonts('url("../fonts/x${pair[0]}")', frontend, 'css/fonts.css')
+		assert got.contains('data:${pair[1]};base64,'), 'wrong mime for ${pair[0]}: ${got}'
+	}
 }

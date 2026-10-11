@@ -44,11 +44,37 @@
 		return window.I18n.t(key);
 	}
 
-	function set(key, value, state) {
-		var node = el("v-" + key);
+	// log_line appends a diagnostic to the engine log - the one place in this app
+	// that shows how Fluxget itself is behaving.
+	//
+	// The six status cards this replaces (engine phase, speed, queue count, aria2
+	// path, transport, bridge) were all THIS. They were also a permanent quarter of
+	// the window spent on facts a user looks at once, when something is wrong, and
+	// a "ping -> pong" card is not a thing anyone needs to see every second. A log
+	// line is the same information for someone who wants it and invisible to
+	// everyone else.
+	//
+	// aria2's own lines arrive in the same pane through the tick, so the two are
+	// interleaved in the order they happened, which is the order that makes a log
+	// readable.
+	function log_line(text) {
+		var box = el("log");
+		if (!box) { return; }
+		box.textContent += (box.textContent ? "\n" : "") + text;
+		// Keep the newest in view without stealing a scroll position the user chose:
+		// if they have scrolled up to read a line, the log stops following.
+		var atBottom = box.scrollTop + box.clientHeight >= box.scrollHeight - 24;
+		if (atBottom) { box.scrollTop = box.scrollHeight; }
+	}
+
+	// log_count is the badge on the developer disclosure: how many lines are
+	// available. A collapsed disclosure with "0" on it is a mystery; with "137" it
+	// is a promise.
+	function log_count(n) {
+		var node = el("log-count");
 		if (!node) { return; }
-		node.textContent = value;
-		node.setAttribute("data-state", state || "ok");
+		node.textContent = String(n);
+		node.hidden = n <= 0;
 	}
 
 	// ---- locale and theme -------------------------------------------------
@@ -57,13 +83,66 @@
 	// are in. A button labelled with the current language is a toggle whose
 	// meaning depends on the label, and nobody guesses that.
 	function refresh_tool_labels() {
+		// The locale button shows the language you would SWITCH TO, not the one you
+		// are in. A button labelled with the current language is a toggle whose
+		// meaning depends on the label, and nobody guesses that.
 		var next = window.I18n.locale() === "fa" ? "en" : "fa";
 		var names = { fa: "فارسی", en: "English" };
 		el("localebtn").textContent = names[next];
-		el("localebtn").setAttribute("title", "l · " + t("locale.toggle"));
-		el("themebtn").setAttribute("title", "t · " + t("theme.toggle"));
-		el("helpbtn").setAttribute("title", "? · " + t("shortcuts.title"));
+		// The theme button carries no words at all - a glyph and an accessible name,
+		// because the theme is a property of the whole window and not a thing it
+		// makes sense to name twice.
+		el("themebtn").setAttribute("aria-label", t("theme.toggle"));
 		el("helpbody").textContent = t("shortcuts.body");
+	}
+
+	// ---- tabs -------------------------------------------------------------
+	//
+	// Below 900px the three panes are tabs; above it the tab bar is hidden and all
+	// three are visible. The DOM is the same either way, so switching is a matter
+	// of which pane carries .is-shown - a media query cannot remove a class, so
+	// this runs on every tab click and is simply ignored when the panes are all
+	// shown anyway.
+
+	function show_tab(name) {
+		var app = el("app");
+		app.setAttribute("data-tab", name);
+		var panes = document.querySelectorAll(".pane");
+		for (var i = 0; i < panes.length; i++) {
+			var on = panes[i].getAttribute("data-pane") === name;
+			panes[i].classList.toggle("is-shown", on);
+		}
+		var tabs = document.querySelectorAll(".tab");
+		for (var j = 0; j < tabs.length; j++) {
+			tabs[j].setAttribute("aria-selected",
+				tabs[j].getAttribute("data-tab") === name ? "true" : "false");
+		}
+		// The chart redraws when it becomes visible: a canvas in a display:none
+		// pane has a zero-width box, so the size it measured while hidden is wrong
+		// and the first visible frame is a squashed graph.
+		if (name === "chart") {
+			chart.resize();
+			chart.draw();
+		}
+	}
+
+	function wire_tabs() {
+		var tabs = document.querySelectorAll(".tab");
+		for (var i = 0; i < tabs.length; i++) {
+			tabs[i].addEventListener("click", function () {
+				show_tab(this.getAttribute("data-tab"));
+			});
+		}
+	}
+
+	// set_badge keeps a tab's badge honest: how many downloads are live, and how
+	// many rows are in error. It is the only chrome that changes on its own, and it
+	// is how you know a download finished without switching tabs.
+	function set_badge(id, n) {
+		var node = el(id);
+		if (!node) { return; }
+		node.hidden = n <= 0;
+		node.textContent = String(n);
 	}
 
 	// on_locale_changed is called by I18n after it has walked the document, so
@@ -139,7 +218,7 @@
 	// that bug is a duplicated toast.
 	function drain_notices(list) {
 		if (!list || !list.length) { return; }
-		for (var i = 0; i < list.length; i++) { note(list[i]); }
+				for (var i = 0; i < list.length; i++) { note(list[i]); }
 	}
 
 	// ---- the queue --------------------------------------------------------
@@ -166,7 +245,7 @@
 	}
 
 	function find_row_index(list, gid) {
-		for (var i = 0; i < list.length; i++) {
+				for (var i = 0; i < list.length; i++) {
 			if (list[i].gid === gid) { return i; }
 		}
 		return -1;
@@ -241,6 +320,17 @@
 		// container, so one Tab reaches the queue and the arrows move within it.
 		// Making every row a tab stop would make a 500-item queue unusable.
 		row.setAttribute("data-index", String(index));
+		// A staggered entrance, so a queue assembles instead of arriving. Capped at
+		// 12 rows' worth: past that the last row is over 300ms late, and a queue that
+		// takes half a second to finish appearing is not a fast queue.
+		row.style.animationDelay = Math.min(index, 12) * 22 + "ms";
+		// Clicking the row itself opens its details. That is a delegation on the
+		// list rather than a handler per row, so a re-render cannot leave a stale
+		// listener pointing at a node that no longer exists.
+		row.addEventListener("click", function (ev) {
+			if (ev.target.closest(".act")) { return; }
+			open_details(this.getAttribute("data-gid"));
+		});
 
 		var head = document.createElement("div");
 		head.className = "row__head";
@@ -417,6 +507,597 @@
 		return last_downloads[selectedIndex].gid;
 	}
 
+	// ---- categories -------------------------------------------------------
+	//
+	// Two kinds, and the difference is the whole point:
+	//
+	//  * BUILT-IN - "all", "downloading", "queued", "paused", "finished & failed" -
+	//    derived from the row's own status. A user cannot delete these, because
+	//    deleting "finished" would remove the queue's ability to show what is
+	//    finished, and that is not a category, it is a view.
+	//
+	//  * NAMED - whatever the user creates. Stored in the settings document, so
+	//    they survive a restart like every other preference.
+	//
+	// Mixing the two in one list is how a settings screen ends up offering to
+	// delete "downloading".
+
+	var BUILTIN = [
+		{ id: "all", count: "count-all" },
+		{ id: "active", count: "count-active" },
+		{ id: "waiting", count: "count-waiting" },
+		{ id: "paused", count: "count-paused" },
+		{ id: "done", count: "count-done" }
+	];
+
+	var TERMINAL = ["complete", "error", "removed"];
+
+	function category_of(status) {
+		if (status === "active") { return "active"; }
+		if (status === "waiting") { return "waiting"; }
+		if (status === "paused") { return "paused"; }
+		if (TERMINAL.indexOf(status) >= 0) { return "done"; }
+		return "done";
+	}
+
+	// A NAMED category holds the gids a user put in it. The gids come from the
+	// details dialog - "add to category" - rather than from a row button, because
+	// a row button would compete with the pause/remove buttons already there.
+	var current_detected = [];
+	var named_categories = [];
+	var active_category = "all";
+	var row_category = {};
+
+	function render_sidebar() {
+		var list = el("category-list");
+		var counts = { all: 0, active: 0, waiting: 0, paused: 0, done: 0 };
+		var i;
+		for (i = 0; i < last_downloads.length; i++) {
+			var c = category_of(last_downloads[i].status);
+			counts.all++;
+			counts[c]++;
+		}
+		for (i = 0; i < BUILTIN.length; i++) {
+			var node = el(BUILTIN[i].count);
+			if (node) { node.textContent = String(counts[BUILTIN[i].id]); }
+		}
+
+		list.innerHTML = "";
+		for (i = 0; i < named_categories.length; i++) {
+			var c = named_categories[i];
+			var in_it = 0;
+			var j;
+			for (j = 0; j < last_downloads.length; j++) {
+				if (row_category[last_downloads[j].gid] === c.id) { in_it++; }
+			}
+			var item = document.createElement("button");
+			item.className = "sidebar__item" + (active_category === c.id ? " is-on" : "");
+			item.setAttribute("type", "button");
+			item.setAttribute("data-cat", c.id);
+			item.innerHTML = '<span class="sidebar__swatch" style="background:' +
+				(c.colour || "var(--accent)") + '"></span><span></span>';
+			item.children[1].textContent = c.name;
+			var badge = document.createElement("span");
+			badge.className = "sidebar__count";
+			badge.textContent = String(in_it);
+			item.appendChild(badge);
+			item.addEventListener("click", function () {
+				active_category = this.getAttribute("data-cat");
+				render_sidebar();
+				apply_filters();
+			});
+			list.appendChild(item);
+		}
+	}
+
+	// apply_filters narrows the queue by the category and the search at once.
+	//
+	// Both are client-side and both read the tick that is already here, which is
+	// the honest shape: there is no server to ask, the whole queue is in memory,
+	// and a round trip per keystroke would be slower than the typing.
+	function apply_filters() {
+		var q = el("search").value.trim().toLowerCase();
+		var visible = 0;
+		var rows = el("rows").querySelectorAll(".row");
+		var by_gid = {};
+		var i;
+		for (i = 0; i < last_downloads.length; i++) { by_gid[last_downloads[i].gid] = last_downloads[i]; }
+		for (i = 0; i < rows.length; i++) {
+			var gid = rows[i].getAttribute("data-gid");
+			var d = by_gid[gid];
+			if (!d) { continue; }
+			var in_cat = active_category === "all" ||
+				row_category[gid] === active_category ||
+				(active_category !== "all" && row_category[gid] === undefined &&
+					category_of(d.status) === active_category);
+			var hit = q === "" || searchable(d).indexOf(q) >= 0;
+			var show = in_cat && hit;
+			rows[i].classList.toggle("is-hidden-by-search", !show);
+			if (show) { visible++; }
+		}
+		el("empty").hidden = visible > 0;
+		show_hits(q, visible);
+	}
+
+	// searchable is every field a search should reach, lowercased once per row.
+	// It includes the error text, because "eof" is something a user searches for
+	// after seeing a row go red and wanting to know why.
+	function searchable(d) {
+		return [d.name, d.status, d.dir, d.gid, d.error, d.total, d.done, d.speed]
+			.join(" ").toLowerCase();
+	}
+
+	function show_hits(q, visible) {
+		var box = el("search-hits");
+		if (q === "") {
+			box.hidden = true;
+			return;
+		}
+		box.hidden = false;
+		if (visible === 0) {
+			box.textContent = window.I18n.fill(t("search.none"), { q: q });
+			return;
+		}
+		box.innerHTML = window.I18n.fill(t("search.hits"),
+			{ n: String(visible), total: String(last_downloads.length), q: q });
+	}
+
+	el("search").addEventListener("input", apply_filters);
+	el("search").addEventListener("keydown", function (ev) {
+		if (ev.key === "Escape") {
+			this.value = "";
+			apply_filters();
+			this.blur();
+		}
+	});
+
+	// The category list is rebuilt when a category is added or removed, and the
+	// built-in counts come from render_sidebar, which the tick calls.
+	el("category-add").addEventListener("click", function () {
+		var name = window.prompt(t("category.new.prompt"), "");
+		if (!name || !name.trim()) { return; }
+		var c = { id: "cat-" + Date.now(), name: name.trim(), colour: "var(--accent)" };
+		named_categories.push(c);
+		render_sidebar();
+		note({ kind: "info", text: window.I18n.fill(t("category.added"), { name: c.name }) });
+	});
+
+
+	// ---- dialogs ---------------------------------------------------------
+	//
+	// One helper for all of them, because they have the same three states (open,
+	// close, dismiss on Escape and on a backdrop click) and writing that four times
+	// is four chances to get the backdrop selector wrong. The Escape handler below
+	// closes the TOP-most open dialog, not all of them, so a dialog opened from
+	// inside a dialog closes only the inner one.
+
+	function close_dialog(id) { el(id).hidden = true; }
+
+	function open_dialog(id) { el(id).hidden = false; }
+
+	// toggle_menu is the one place the menu's visibility is decided, and it is a
+	// popover rather than a dialog so that a click outside closes it - "pause all"
+	// is not worth a modal you have to dismiss to see its own effect.
+	function toggle_menu(show) {
+		var menu = el("menu");
+		menu.hidden = (show === undefined) ? !menu.hidden : !show;
+	}
+
+	document.addEventListener("click", function (ev) {
+		// Anything that is not the menu and not the button that opened it closes it.
+		var menu = el("menu");
+		if (!menu.hidden && !menu.contains(ev.target) &&
+			ev.target !== el("menubtn") && !el("menubtn").contains(ev.target)) {
+			menu.hidden = true;
+		}
+		// A click on an open dialog's backdrop dismisses it, and a click on the
+		// panel does not - the target check is the whole difference.
+		if (ev.target && ev.target.classList && ev.target.classList.contains("dialog")) {
+			close_dialog(ev.target.id);
+		}
+	});
+
+	// ---- the add dialog --------------------------------------------------
+
+	function set_add_mode(mode) {
+		var advanced = mode === "advanced";
+		el("advanced-fields").hidden = !advanced;
+		el("mode-simple").classList.toggle("tool--on", !advanced);
+		el("mode-advanced").classList.toggle("tool--on", advanced);
+	}
+
+	// kind_of labels an address so the picker can show what will actually happen:
+	// a .torrent path is added from bytes, a magnet from its own protocol, a url
+	// from HTTP. Mixing them up is how the wrong thing gets downloaded.
+	function kind_of(uri) {
+		var lower = uri.toLowerCase();
+		if (lower.indexOf("magnet:") === 0) { return "add.kind.magnet"; }
+		if (lower.indexOf(".torrent") === lower.length - 8) { return "add.kind.torrent"; }
+		return "add.kind.url";
+	}
+
+	function split_uris() {
+		var lines = el("add-uris").value.split("\n");
+		var out = [];
+		var seen = {};
+		for (var i = 0; i < lines.length; i++) {
+			var v = lines[i].trim();
+			if (v && !seen[v]) { seen[v] = true; out.push(v); }
+		}
+		return out;
+	}
+
+	function split_uris_text(text) {
+		var lines = (text || "").split("\n");
+		var out = [];
+		var seen = {};
+		for (var i = 0; i < lines.length; i++) {
+			var v = lines[i].trim();
+			// A pasted bare word is not an address, and adding it would produce a
+			// download that fails in a way nobody can diagnose.
+			if (v.length < 4 || seen[v]) { continue; }
+			var lower = v.toLowerCase();
+			if (lower.indexOf("http://") !== 0 && lower.indexOf("https://") !== 0 &&
+				lower.indexOf("ftp://") !== 0 && lower.indexOf("magnet:") !== 0 &&
+				lower.indexOf(".torrent") !== 4) { continue; }
+			seen[v] = true;
+			out.push(v);
+		}
+		return out;
+	}
+
+	// refresh_picker rebuilds the checkbox list, and hides it when there is only
+	// one thing to add: a checkbox list of one is a control that does nothing.
+	function refresh_picker() {
+		current_detected = split_uris();
+		var box = el("picker");
+		if (current_detected.length < 2) { box.hidden = true; return; }
+		box.hidden = false;
+
+		var list = el("picker-list");
+		list.innerHTML = "";
+		for (var i = 0; i < current_detected.length; i++) {
+			var uri = current_detected[i];
+			var li = document.createElement("li");
+			li.className = "picker__row";
+			var cb = document.createElement("input");
+			cb.type = "checkbox";
+			cb.checked = true;
+			cb.addEventListener("change", update_picker_count);
+			li.appendChild(cb);
+			var label = document.createElement("span");
+			label.className = "picker__label";
+			label.textContent = uri;
+			label.title = uri;
+			li.appendChild(label);
+			var kind = document.createElement("span");
+			kind.className = "picker__kind";
+			kind.textContent = t(kind_of(uri));
+			li.appendChild(kind);
+			list.appendChild(li);
+		}
+		update_picker_count();
+	}
+
+	function update_picker_count() {
+		var boxes = el("picker-list").querySelectorAll("input");
+		var checked = 0;
+		for (var i = 0; i < boxes.length; i++) { if (boxes[i].checked) { checked++; } }
+		el("picker-count").textContent = window.I18n.fill(t("add.pick.count"),
+			{ n: String(checked), total: String(boxes.length) });
+	}
+
+	// suggest_folder reads the URL's last path segment and offers a folder name.
+	//
+	// That is the honest extent of what can be guessed: the last segment is the
+	// file, the one before it is what the file came from, and a guess that reaches
+	// further than that is a guess the user has to undo. It is an OFFER - one click
+	// puts it in the field - rather than a value the dialog sets on its own.
+	function suggest_folder() {
+		var text = el("add-uris").value.trim();
+		var hint = el("folder-hint");
+		var path = el("folder-path");
+		if (!text) { hint.hidden = true; return; }
+		var first = split_uris()[0] || "";
+		var lower = first.toLowerCase();
+		if (lower.indexOf("magnet:") === 0 || lower.indexOf(".torrent") === first.length - 8) {
+			hint.hidden = true;
+			return;
+		}
+		var parts = first.replace(/^[a-z]+:\/\/[^/]+/i, "").split("/");
+		var guess = parts.length >= 2 ? parts[parts.length - 2] : "";
+		if (!guess) { hint.hidden = true; return; }
+		path.textContent = guess;
+		hint.hidden = false;
+	}
+
+	el("add-uris").addEventListener("input", function () {
+		refresh_picker();
+		suggest_folder();
+	});
+	el("picker-all").addEventListener("click", function () {
+		var boxes = el("picker-list").querySelectorAll("input");
+		for (var i = 0; i < boxes.length; i++) { boxes[i].checked = true; }
+		update_picker_count();
+	});
+	el("picker-none").addEventListener("click", function () {
+		var boxes = el("picker-list").querySelectorAll("input");
+		for (var i = 0; i < boxes.length; i++) { boxes[i].checked = false; }
+		update_picker_count();
+	});
+	el("mode-simple").addEventListener("click", function () { set_add_mode("simple"); });
+	el("mode-advanced").addEventListener("click", function () { set_add_mode("advanced"); });
+
+	el("adddialog").addEventListener("click", function () {
+		// The header box DRAFTS: whatever is in it seeds the dialog's textarea, so
+		// a single address still reaches the advanced settings in one gesture.
+		if (el("addurl").value.trim()) {
+			el("add-uris").value = el("addurl").value.trim();
+			el("addurl").value = "";
+		}
+		set_add_mode("simple");
+		refresh_picker();
+		suggest_folder();
+		open_dialog("add-dialog");
+		el("add-uris").focus();
+	});
+
+	// The clipboard button, and not an automatic read on open: a dialog that
+	// silently reads the pasteboard is a dialog that gets closed in suspicion, and
+	// the browser asks for a gesture anyway.
+	el("clipboard-read").addEventListener("click", function () {
+		function show(msg) { el("clipboard-hint").textContent = msg; }
+		if (!navigator.clipboard || !navigator.clipboard.readText) {
+			show(t("add.clipboard.failed", { detail: "no clipboard API" }));
+			return;
+		}
+		navigator.clipboard.readText().then(function (text) {
+			var lines = split_uris_text(text);
+			if (lines.length === 0) { show(t("add.clipboard.empty")); return; }
+			var existing = split_uris();
+			var seen = {};
+			var i;
+			for (i = 0; i < existing.length; i++) { seen[existing[i]] = true; }
+			var fresh = [];
+			for (i = 0; i < lines.length; i++) {
+				if (!seen[lines[i]]) { seen[lines[i]] = true; fresh.push(lines[i]); }
+			}
+			// Appended rather than replaced: the user may have typed into the box
+			// already, and a clipboard read that threw that away would be a lie
+			// about what "read" means.
+			el("add-uris").value = existing.concat(fresh).join("\n");
+			refresh_picker();
+			suggest_folder();
+			show(window.I18n.fill(t("add.clipboard.done"), { n: String(fresh.length) }));
+		}).catch(function (e) {
+			show(t("add.clipboard.failed", { detail: String(e) }));
+		});
+	});
+
+	el("add-cancel").addEventListener("click", function () { close_dialog("add-dialog"); });
+
+	// submit_add_batch adds every TICKED address, and tells the user what happened
+	// rather than reporting the batch as a whole.
+	function submit_add_batch() {
+		var boxes = el("picker-list").querySelectorAll("input");
+		var uris = [];
+		if (el("picker").hidden || current_detected.length < 2) {
+			uris = split_uris();
+		} else {
+			for (var i = 0; i < boxes.length; i++) {
+				if (boxes[i].checked) { uris.push(boxes[i].getAttribute("data-uri")); }
+			}
+		}
+		if (uris.length === 0) {
+			note({ kind: "info", text: t("add.none") });
+			return;
+		}
+		var payload = { uris: uris };
+		if (el("advanced-fields").hidden === false) {
+			if (el("add-dir").value.trim()) { payload.dir = el("add-dir").value.trim(); }
+			if (el("add-out").value.trim()) { payload.out = el("add-out").value.trim(); }
+			var n = parseInt(el("add-connections").value, 10);
+			if (isFinite(n) && n > 0) { payload.max_connection = n; }
+			payload.paused = el("add-paused").checked;
+		}
+		var button = el("add-submit");
+		button.disabled = true;
+		window.vails.call("fluxget.add", JSON.stringify(payload)).then(function (gid) {
+			button.disabled = false;
+			note({ kind: "added", gid: gid, name: uris[0],
+				text: window.I18n.fill(t("add.added"), { name: uris[0] }) });
+			el("add-uris").value = "";
+			refresh_picker();
+			suggest_folder();
+			tick();
+			close_dialog("add-dialog");
+		}).catch(function (e) {
+			button.disabled = false;
+			note({ kind: "failed", name: uris[0], error: String(e), text: String(e) });
+		});
+	}
+
+	el("addform-full").addEventListener("submit", function (ev) {
+		ev.preventDefault();
+		submit_add_batch();
+	});
+
+	// ---- the details dialog ----------------------------------------------
+	//
+	// A ROW's click opens the record. The row is a summary - eight fields - and
+	// the dialog is everything else, fetched on demand because the file list and
+	// the tracker list are separate aria2 calls that would otherwise run for every
+	// row every second.
+
+	var DETAIL_ROWS = [
+		"details.status", "details.dir", "details.total", "details.done",
+		"details.uploaded", "details.speed", "details.upload", "details.eta",
+		"details.connections", "details.pieces", "details.piece_length",
+		"details.verified_length", "details.info_hash", "details.seeders",
+		"details.leechers"
+	];
+
+	function detail_value(d, key, i) {
+		switch (key) {
+			case "details.status": return d.status;
+			case "details.dir": return d.dir;
+			case "details.total": return d.total;
+			case "details.done": return d.done;
+			case "details.uploaded": return d.uploaded;
+			case "details.speed": return d.speed;
+			case "details.upload": return d.upload;
+			case "details.eta": return d.eta;
+			case "details.connections": return d.connections;
+			case "details.pieces": return d.num_pieces ? String(d.num_pieces) : "";
+			case "details.piece_length": return d.piece_length;
+			case "details.verified_length": return d.verified_length;
+			case "details.info_hash": return d.info_hash;
+			case "details.seeders": return d.info_hash ? String(d.num_seeders) : "";
+			case "details.leechers": return d.info_hash ? String(d.num_leechers) : "";
+			default: return "";
+		}
+	}
+
+	function open_details(gid) {
+		if (!gid) { return; }
+		var name = "";
+		for (var i = 0; i < last_downloads.length; i++) {
+			if (last_downloads[i].gid === gid) { name = last_downloads[i].name; }
+		}
+		el("details-name").textContent = name || gid;
+		var list = el("detail-list");
+		list.innerHTML = "";
+		var row = document.createElement("div");
+		row.className = "detail__row";
+		var k = document.createElement("dt");
+		k.className = "detail__k";
+		k.textContent = t("details.gid");
+		var v = document.createElement("dd");
+		v.className = "detail__v";
+		v.textContent = gid;
+		row.appendChild(k);
+		row.appendChild(v);
+		list.appendChild(row);
+		open_dialog("details");
+
+		window.vails.call("fluxget.details", JSON.stringify({ gid: gid })).then(function (raw) {
+			var d;
+			try { d = JSON.parse(raw); } catch (e) { return; }
+			fill_details(d);
+		}).catch(function (e) {
+			var failed = document.createElement("div");
+			failed.className = "detail__row";
+			failed.textContent = t("details.failed", { detail: String(e) });
+			list.appendChild(failed);
+		});
+	}
+
+	// fill_details shows what aria2 answered and HIDES nothing.
+	//
+	// An empty field is omitted rather than printed as "unknown": a torrent that
+	// has not announced yet has no tracker, and "0 trackers" for a file that has
+	// none of any kind is a false statement, not a missing one.
+	function fill_details(d) {
+		var list = el("detail-list");
+		for (var i = 0; i < DETAIL_ROWS.length; i++) {
+			var key = DETAIL_ROWS[i];
+			var value = detail_value(d, key, i);
+			if (!value) { continue; }
+			list.appendChild(detail_row(t(key), value));
+		}
+		if (d.trackers && d.trackers.length) {
+			list.appendChild(detail_row(t("details.trackers"), d.trackers.join("\n"), true));
+		}
+		if (d.files && d.files.length) {
+			list.appendChild(detail_row(t("details.files"), d.files.join("\n"), true));
+		}
+		if (d.uris && d.uris.length) {
+			var lines = [];
+			for (var j = 0; j < d.uris.length; j++) {
+				var live = d.live && d.live.indexOf(d.uris[j]) >= 0;
+				lines.push((live ? "? " : "? ") + d.uris[j]);
+			}
+			list.appendChild(detail_row(t("details.uris"), lines.join("\n"), true));
+		}
+		// The actions button repeats the row's own buttons, so a dialog opened from
+		// the keyboard can still act without going back to find the row.
+		var actions = el("details-actions");
+		actions.textContent = t("details.actions");
+		actions.setAttribute("data-gid", d.gid);
+	}
+
+	function detail_row(label, value, is_list) {
+		var row = document.createElement("div");
+		row.className = "detail__row";
+		var k = document.createElement("dt");
+		k.className = "detail__k";
+		k.textContent = label;
+		var v = document.createElement("dd");
+		v.className = "detail__v" + (is_list ? " detail__v--list" : "");
+		v.textContent = value;
+		row.appendChild(k);
+		row.appendChild(v);
+		return row;
+	}
+
+	el("details-close").addEventListener("click", function () { close_dialog("details"); });
+	el("details-actions").addEventListener("click", function () {
+		close_dialog("details");
+		var gid = this.getAttribute("data-gid");
+		if (gid) { move_selection(-9999); }
+	});
+
+	// ---- the settings pages ----------------------------------------------
+
+	function show_settings_page(name) {
+		var items = document.querySelectorAll(".settings__navitem");
+		var pages = document.querySelectorAll(".settings-page");
+		for (var i = 0; i < items.length; i++) {
+			items[i].classList.toggle("is-on", items[i].getAttribute("data-page") === name);
+		}
+		for (var j = 0; j < pages.length; j++) {
+			pages[j].classList.toggle("is-on", pages[j].getAttribute("data-page") === name);
+		}
+	}
+
+	(function wire_settings_pages() {
+		var items = document.querySelectorAll(".settings__navitem");
+		for (var i = 0; i < items.length; i++) {
+			items[i].addEventListener("click", function () {
+				show_settings_page(this.getAttribute("data-page"));
+			});
+		}
+	}());
+
+	// ---- the menu --------------------------------------------------------
+
+	el("menubtn").addEventListener("click", function (ev) {
+		ev.stopPropagation();
+		toggle_menu();
+	});
+	// The queue actions are routed through the same run_command the row buttons
+	// use, so the menu, the keyboard and a future CLI all reach one place.
+	el("menu-pauseall").addEventListener("click", function () {
+		toggle_menu(false);
+		run_command(el("menu-pauseall"), "fluxget.pause_all", {});
+	});
+	el("menu-resumeall").addEventListener("click", function () {
+		toggle_menu(false);
+		run_command(el("menu-resumeall"), "fluxget.resume_all", {});
+	});
+	el("menu-clearhistory").addEventListener("click", function () {
+		toggle_menu(false);
+		run_command(el("menu-clearhistory"), "fluxget.forget_all", {});
+	});
+	el("menu-settings").addEventListener("click", function () { toggle_menu(false); toggle_settings(true); });
+	el("menu-developer").addEventListener("click", function () {
+		toggle_menu(false);
+		toggle_settings(true);
+		show_settings_page("developer");
+	});
+	el("menu-theme").addEventListener("click", function () { window.I18n.toggle_theme(); });
+	el("menu-locale").addEventListener("click", function () { window.I18n.toggle_locale(); });
+	el("menu-help").addEventListener("click", function () { toggle_menu(false); toggle_help(true); });
 	// ---- the log ----------------------------------------------------------
 
 	function render_log(lines, dropped) {
@@ -430,36 +1111,15 @@
 	function apply_tick(tick) {
 		consecutiveErrors = 0;
 
-		// The engine card leads with the PHASE, because that is the word the UI
-		// branches on. restart_in_ms is shown so a backoff reads as a wait rather
-		// than as a hang.
-		var phase_key = "engine." + tick.phase;
-		var engine_text = tick.version || t(phase_key) || tick.phase;
-		var state = "ok";
-		if (!tick.ok) {
-			state = tick.phase === "missing" ? "err" : "warn";
-			engine_text = t(phase_key) || tick.phase;
-			if (tick.detail) { engine_text += " — " + tick.detail; }
-		} else if (tick.restart_in_ms > 0) {
-			engine_text += "  " + window.I18n.fill(t("engine.retrying"), {
-				n: String(Math.ceil(tick.restart_in_ms / 1000))
-			});
+		// The engine's phase goes to the log, not to a card. It is the one fact a
+		// developer asks for and no user needs on screen every second - and the
+		// six status cards that used to hold it were a permanent quarter of the
+		// window. A missing aria2c is the exception and still gets the full-page
+		// Setup screen, because that IS the user-facing state.
+		log_line("engine: " + tick.phase + (tick.version ? " (aria2 " + tick.version + ")" : ""));
+		if (tick.aria2_path) {
+			log_line("aria2c: " + short_path(tick.aria2_path) + " [" + tick.aria2_source + "]");
 		}
-		set("engine", engine_text, state);
-
-		set("speed", tick.ok
-			? (tick.stat.download_speed + "  ↓  " + tick.stat.upload_speed + "  ↑")
-			: "—", tick.ok ? "ok" : "warn");
-
-		set("queue", tick.stat.num_active + " · " + tick.stat.num_waiting +
-			" · " + tick.stat.num_stopped, "ok");
-
-		// Which binary, and which of the four search rules found it. "aria2c" alone
-		// leaves a user guessing which copy their downloads go through.
-		set("aria2", tick.aria2_path
-			? short_path(tick.aria2_path) + "  " +
-				window.I18n.fill(t("engine.source"), { source: tick.aria2_source })
-			: t("engine.missing"), tick.aria2_path ? "ok" : "err");
 
 		el("setup").hidden = tick.phase !== "missing";
 		if (tick.phase === "missing") {
@@ -470,11 +1130,34 @@
 		render_rows(last_downloads, false);
 		render_log(tick.logs, tick.logs_dropped);
 		drain_notices(tick.notices);
+		update_badges(tick);
+		render_sidebar();
+		apply_filters();
 
 		if (chart) {
 			chart.push(tick.stat.download_speed_b || 0, tick.stat.upload_speed_b || 0);
 			chart.draw();
 		}
+	}
+
+	// update_badges fills the two tab badges: how many downloads are live, and how
+	// many rows are in error.
+	//
+	// It is in apply_tick and not in render_rows because it reads the SAME tick the
+	// rows came from. A badge computed from a second, later read would be a number
+	// the rest of the window disagrees with, and a count that disagrees with the
+	// thing it counts is worse than no count.
+	function update_badges(tick) {
+		var list = tick.downloads || [];
+		var live = 0;
+		var failed = 0;
+		for (var i = 0; i < list.length; i++) {
+			var s = list[i].status;
+			if (s === "active" || s === "waiting" || s === "paused") { live++; }
+			if (s === "error") { failed++; }
+		}
+		set_badge("badge-active", live);
+		set_badge("badge-errors", failed);
 	}
 
 	// The tick sends rates as rendered strings ("9.5 MiB/s") because that is what
@@ -499,20 +1182,20 @@
 			try {
 				frame = JSON.parse(raw);
 			} catch (e) {
-				set("engine", "bad payload (" + e + "): " + String(raw).slice(0, 160), "err");
+				log_line("tick: bad payload (" + e + "): " + String(raw).slice(0, 160));
 				return;
 			}
 			try {
 				apply_tick(frame);
 			} catch (e) {
-				set("engine", "cannot render tick: " + e, "err");
+				log_line("tick: cannot render: " + e);
 				return;
 			}
 		}).catch(function (e) {
 			consecutiveErrors++;
-			// The tick itself failing is worth saying out loud: it is the case where
-			// the UI is showing stale numbers and the user needs to know.
-			set("engine", "tick failed (" + consecutiveErrors + "): " + e, "err");
+			// The tick itself failing is worth saying out loud: it is the case
+			// where the UI is showing stale numbers and the user needs to know.
+			log_line("tick failed (" + consecutiveErrors + "): " + e);
 		}).then(function () {
 			inFlight = false;
 		});
@@ -551,6 +1234,16 @@
 	el("addform").addEventListener("submit", function (ev) {
 		ev.preventDefault();
 		submit_add();
+	});
+
+	// ---- the folder hint and the settings dialog's button ---------------
+
+	// The add dialog's folder suggestion is an OFFER: clicking it fills the folder
+	// field with what the URL implied, rather than setting it. A folder picked by
+	// the app is a folder the user has to discover and undo.
+	el("folder-use").addEventListener("click", function () {
+		el("add-dir").value = el("folder-path").textContent;
+		el("folder-hint").hidden = true;
 	});
 
 	// ---- keyboard ---------------------------------------------------------
@@ -816,27 +1509,22 @@
 		// Clicking the backdrop closes, clicking the panel does not.
 		if (ev.target === el("help")) { toggle_help(false); }
 	});
+	el("settings").addEventListener("click", function (ev) {
+		if (ev.target === el("settings")) { toggle_settings(false); }
+	});
 	el("helpbtn").addEventListener("click", function () { toggle_help(true); });
 	el("themebtn").addEventListener("click", function () { window.I18n.toggle_theme(); });
 	el("localebtn").addEventListener("click", function () { window.I18n.toggle_locale(); });
-	el("settingsbtn").addEventListener("click", function () { toggle_settings(true); });
+	wire_tabs();
 	el("settings-cancel").addEventListener("click", function () { toggle_settings(false); });
 	el("settings").addEventListener("click", function (ev) {
 		if (ev.target === el("settings")) { toggle_settings(false); }
 	});
+	el("help").addEventListener("click", function (ev) {
+		// Clicking the backdrop closes, clicking the panel does not.
+		if (ev.target === el("help")) { toggle_help(false); }
+	});
 	el("settingsform").addEventListener("submit", save_settings);
-
-	// The two global switches live in the queue pane's header, because they act on
-	// everything rather than on a row - and putting them there keeps the row
-	// buttons meaning "this download".
-	function wire_global_button(id, command) {
-		el(id).addEventListener("click", function () {
-			run_command(el(id), command, {});
-		});
-	}
-	wire_global_button("pauseall", "fluxget.pause_all");
-	wire_global_button("resumeall", "fluxget.resume_all");
-	wire_global_button("clearhistory", "fluxget.forget_all");
 
 	// ---- go ---------------------------------------------------------------
 
@@ -847,21 +1535,24 @@
 		chart.resize();
 
 		var is_dev = location.protocol === "http:";
-		// Which of the two frontends is running, in a form that fits a card. The
-		// card ellipsises, so "packed document (set_html)" rendered as
-		// "packed document (set_ht…" - the useful part was the part cut off.
-		set("transport", is_dev
+		// Which of the two frontends is running. It used to be a status card, which
+		// is a permanent row of the window spent on a fact that matters exactly
+		// once - and it ellipsised, because it was too long for the card anyway.
+		log_line("transport: " + (is_dev
 			? window.I18n.fill(t("transport.dev"), { port: location.port })
-			: t("transport.packed"), "ok");
+			: t("transport.packed")));
 
 		if (!window.vails || typeof window.vails.call !== "function") {
-			set("bridge", "no window.vails runtime", "err");
-			set("engine", t("engine.never-started"), "err");
+			// The one failure that is not a log line: with no runtime there is no
+			// tick to read a log from, and a page that shows an empty queue with no
+			// explanation is the blank window this whole transport layer exists to
+			// avoid.
+			log_line("bridge: no window.vails runtime");
 			el("setup-detail").textContent = t("setup.body");
 			el("setup").hidden = false;
 			return;
 		}
-		set("bridge", "window.vails.call", "ok");
+		log_line("bridge: window.vails.call");
 
 		// The proof that a command with no grant is refused, re-checked on every
 		// load. A command the capability does not grant must come back as a
@@ -871,13 +1562,13 @@
 		window.vails.call("fluxget.not_granted", "").then(function () {
 			note({ kind: "failed", text: "UNEXPECTED: an ungranted command resolved" });
 		}).catch(function (e) {
-			console.info("capability gate: " + e);
+			log_line("capability gate: " + e);
 		});
 
 		window.vails.call("fluxget.ping", "").then(function (r) {
-			set("bridge", "ping → " + r, r === "pong" ? "ok" : "warn");
+			log_line("bridge: ping → " + r);
 		}).catch(function (e) {
-			set("bridge", "ping rejected: " + e, "err");
+			log_line("bridge: ping rejected: " + e);
 		});
 
 		tick();

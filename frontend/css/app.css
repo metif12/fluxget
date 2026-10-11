@@ -1,129 +1,266 @@
-/* app.css — the Phase 2 component layer.
-   Phase 0's base.css was a reset and a boot screen; this is the part that makes
-   a window look like a product: tokens for both themes, focus that is visible,
-   the chart, dialogs, and the RTL pass.
+/* app.css — the components.
+   base.css is the shell; this is what sits in it. Three rules, and each one is
+   here because it was broken once:
 
-   Three rules this file follows, and they are the ones that separate a design
-   system from a pile of styles:
+   1. NO RAW COLOURS. Everything reads a token. A hex in a rule is a pixel that
+      will not follow the theme switch, and there are always two per component.
+   2. LOGICAL PROPERTIES only. margin-inline, padding-block, inset-inline-start.
+      `left`/`right` would need a mirrored copy for Persian, and the copy would
+      rot.
+   3. SPACING IS THE SCALE, and TYPE IS THE SCALE. No invented pixel values. */
 
-   1. NO RAW COLOURS BELOW. Everything reads a custom property. A hex in a rule is
-      a pixel that will not follow the theme switch, and there are two of those per
-      component that matters.
+/* ---- a queue row ------------------------------------------------------- */
 
-   2. LOGICAL PROPERTIES ONLY for anything that has a direction: margin-inline,
-      padding-block, inset-inline, border-inline-start. `left`/`right` would need
-      a mirrored copy for fa, and the copy would rot.
-
-   3. SPACING IS THE SCALE. --sp-1 through --sp-8, nothing else. A component
-      with 13px and 14px padding is not a design system, it is a coincidence. */
-
-/* ---- theme tokens ------------------------------------------------------- */
-
-:root {
-	/* Chart series. Declared here rather than in tokens.css because they belong to
-	   one component - but they are still tokens, because canvas reads them through
-	   getComputedStyle at draw time and a hex written in chart.js would be a colour
-	   that survives a theme switch and stays dark on a light page. */
-	--chart-down: #4cc2ff;
-	--chart-up:   #43d18b;
-	--chart-grid: #232830;
-
-	--focus:      #4cc2ff;
-	/* A light page needs a softer shadow or every card looks like a sticker. */
-	--shadow:    0 8px 24px rgba(0, 0, 0, .38);
-	--shadow-sm: 0 2px 8px rgba(0, 0, 0, .28);
+.row {
+	position: relative;
+	display: block;
+	padding: var(--sp-3);
+	border-radius: var(--r-2);
+	border: 1px solid transparent;
+	background: transparent;
+	text-align: start;
+	/* Rows arrive with a stagger, not all at once: a queue that appears in one
+	   frame looks like a reload, and a queue that assembles looks like data
+	   arriving. The delay is set inline from the row's index — see boot.js. */
+	animation: row-in var(--dur-3) var(--ease-spring) both;
 }
 
-[data-theme="light"] {
-	--chart-down: #0a6fb5;
-	--chart-up:   #1f8a54;
-	--chart-grid: #e0e4ea;
-	--focus:      #0a6fb5;
-	--shadow:    0 8px 24px rgba(20, 23, 28, .12);
-	--shadow-sm: 0 2px 8px rgba(20, 23, 28, .10);
+@keyframes row-in {
+	from { opacity: 0; transform: translateY(8px); }
+	to   { opacity: 1; transform: none; }
 }
 
-/* ---- focus -------------------------------------------------------------- */
+.row + .row { margin-block-start: var(--sp-1); }
+.row:hover { background: var(--surface-hi); }
 
-/* Never remove the outline without replacing it: a window that can be driven by
-   keyboard has to show where the keyboard is. `:focus-visible` rather than
-   `:focus` so a mouse click does not leave a ring behind on every row. */
-:focus { outline: none; }
+/* The hairline is the status, coloured by aria2's own word. Cheaper to read at a
+   glance than a coloured background, and it survives both themes. */
+.row { border-inline-start: 3px solid var(--line-strong); }
+.row.is-active   { border-inline-start-color: var(--accent); }
+.row.is-waiting  { border-inline-start-color: var(--text-faint); }
+.row.is-paused   { border-inline-start-color: var(--warn); }
+.row.is-complete { border-inline-start-color: var(--ok); }
+.row.is-error    { border-inline-start-color: var(--err); }
 
-:focus-visible {
-	outline: 2px solid var(--focus);
-	outline-offset: 2px;
-	border-radius: var(--r1);
+/* Selection is a background AND an inset ring: the background alone disappears
+   against a selected dark row, and the ring alone reads as a focus indicator. */
+.row.is-selected {
+	background: var(--surface-hi);
+	box-shadow: inset 0 0 0 1px var(--focus);
 }
 
-.row:focus-visible {
-	outline-offset: -1px;
-}
-
-/* ---- topbar actions ----------------------------------------------------- */
-
-.tools {
+.row__head {
 	display: flex;
-	align-items: center;
+	align-items: baseline;
 	gap: var(--sp-2);
-	flex: 0 0 auto;
 }
 
-.tool {
-	/* A button that reads as a label, not a control: it toggles document state,
-	   so a borderless chip with a hover wash is the right weight. */
-	padding: var(--sp-1) var(--sp-3);
+.row__name {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	font-size: var(--text-sm);
+	font-weight: 550;
+}
+
+.row__badges { display: flex; gap: var(--sp-1); flex: 0 0 auto; min-width: 0; }
+
+.badge {
+	padding: 1px var(--sp-2);
+	border-radius: var(--r-pill);
+	background: var(--surface-hover);
+	border: 1px solid var(--line);
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* A badge carries an aria2 message, which is LTR even inside a Persian
+   sentence — "Get EOF from the server." reads wrong when reordered. */
+.badge { direction: ltr; unicode-bidi: isolate; }
+
+.badge[data-kind="torrent"] { color: var(--accent); border-color: var(--accent-dim); }
+.badge[data-kind="seed"]    { color: var(--ok); }
+.badge[data-kind="err"]     { color: var(--err); border-color: var(--err); }
+
+.row__state {
+	flex: 0 0 auto;
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+	direction: ltr;
+	unicode-bidi: isolate;
+}
+
+/* ---- the progress track ------------------------------------------------ */
+
+.row__track {
+	margin: var(--sp-2) 0 var(--sp-1);
+	height: 5px;
+	background: var(--surface-hover);
+	border-radius: var(--r-pill);
+	overflow: hidden;
+}
+
+.row__bar {
+	height: 100%;
+	border-radius: var(--r-pill);
+	background: var(--accent);
+	/* The one transition worth having on a value that changes every tick: without
+	   it a progress bar snaps, and a snap at 1Hz reads as stutter rather than as
+	   data. */
+	transition: width var(--dur-2) var(--ease-out);
+}
+
+.row.is-complete .row__bar { background: var(--ok); }
+.row.is-error    .row__bar { background: var(--err); }
+.row.is-paused   .row__bar { background: var(--warn); }
+
+.row__foot {
+	display: flex;
+	gap: var(--sp-3);
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
+	overflow: hidden;
+}
+
+.row__pct  { margin-inline-start: auto; }
+.row__eta  { color: var(--text-faint); min-width: 56px; text-align: end; }
+
+/* The numbers are formatted by the native side and are LTR by definition. */
+.row__done, .row__pct, .row__speed, .row__eta, .card__v[data-ltr] {
+	direction: ltr;
+	unicode-bidi: isolate;
+	text-align: start;
+}
+
+/* ---- buttons ------------------------------------------------------------ */
+/* One button style for every action in the app: a row button, a pane button, the
+   dialog's save. Three similar-but-different button styles is how a UI ends up
+   looking assembled rather than designed. */
+
+.act {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: var(--sp-1);
+	/* 28px, and not the 30px+ the desktop layout would prefer: at 390px wide a row
+	   has to fit a name and two actions on one line, and a taller button pushes
+	   the state word onto a third row. */
+	min-height: 26px;
+	padding: 2px var(--sp-2);
 	background: transparent;
 	border: 1px solid var(--line);
-	border-radius: var(--r2);
+	border-radius: var(--r-pill);
 	color: var(--text-dim);
-	font-family: var(--font);
-	font-size: 12px;
+	font-size: var(--text-xs);
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
 	cursor: pointer;
-	transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+	transition: background-color var(--dur-1) var(--ease-standard),
+		color var(--dur-1) var(--ease-standard),
+		border-color var(--dur-1) var(--ease-standard),
+		transform var(--dur-1) var(--ease-out);
 }
 
-.tool:hover { background: var(--surface-hi); color: var(--text); }
+.act:hover:not(:disabled) {
+	background: var(--surface-hover);
+	color: var(--text);
+	border-color: var(--line-strong);
+}
 
-/* ---- panes and the chart ------------------------------------------------ */
+.act:active:not(:disabled) { transform: scale(0.96); }
 
-/* The right-hand column, so the queue pane stays a single grid cell while the
-   chart and the log stack inside their own. Without this the two would be three
-   siblings and the layout would depend on how many panes happened to exist. */
-.pane-column {
+/* Disabled is a press in flight. It stays legible rather than fading away:
+   "did my click land?" is exactly what the user is asking at that moment. */
+.act:disabled { opacity: 0.5; cursor: default; }
+
+.act[data-kind="remove"],
+.act[data-kind="forget"] {
+	color: var(--err);
+}
+
+.act[data-kind="remove"]:hover:not(:disabled),
+.act[data-kind="forget"]:hover:not(:disabled) {
+	border-color: var(--err);
+}
+
+.act[data-kind="retry"]:hover:not(:disabled),
+.act[data-kind="pause"]:hover:not(:disabled),
+.act[data-kind="resume"]:hover:not(:disabled) {
+	color: var(--accent);
+	border-color: var(--accent-dim);
+}
+
+.act--go {
+	background: linear-gradient(135deg, var(--accent), var(--accent-2));
+	color: #06121a;
+	border: none;
+	padding: var(--sp-2) var(--sp-4);
+	min-height: 32px;
+	font-size: var(--text-sm);
+}
+
+.act--go:hover:not(:disabled) { filter: brightness(1.08); color: #06121a; }
+
+.act--wide {
+	padding: var(--sp-2) var(--sp-4);
+	min-height: 32px;
+	font-size: var(--text-sm);
+}
+
+/* ---- the row action strip ---------------------------------------------- */
+
+/* Revealed on hover OR focus-within OR selection. Always-visible buttons turn a
+   thirty-row queue into ninety buttons and hide the download names behind them.
+   But "hidden until hover" is not an option either, because a keyboard user
+   cannot hover — so the third selector is the one that makes it reachable. */
+.row__actions {
 	display: flex;
-	flex-direction: column;
-	gap: var(--sp-4);
-	min-width: 0;
-	min-height: 0;
+	gap: var(--sp-1);
+	flex: 0 0 auto;
+	opacity: 0;
+	transition: opacity var(--dur-1) var(--ease-standard);
 }
 
-/* The chart is a fixed height - it is a picture, not a list - so it takes what
-   it needs and no more. The log below it takes the rest, which is why the flex
-   value is here rather than on .pane: a .pane defaults to flex 0 1 auto, which
-   sizes it to its CONTENT, and a log with zero lines in it is zero tall. The
-   symptom of getting this wrong is a column with a chart at the top, a stub of a
-   log under it, and a third of the window empty. */
+.row:hover .row__actions,
+.row:focus-within .row__actions,
+.row.is-selected .row__actions { opacity: 1; }
+
+/* ---- the pane toolbar ---------------------------------------------------- */
+
+.pane__head { flex-wrap: wrap; }
+
+/* ---- the chart ---------------------------------------------------------- */
+
 .pane--chart { flex: 0 0 auto; }
-.pane--log   { flex: 1 1 auto; }
 
 .chart {
 	display: block;
 	width: 100%;
-	height: 110px;
-	/* The drawing direction is fixed LTR even in an RTL document: a time series
-	   that runs right-to-left reads as "the future is on the left". This is the
-	   one place the page overrides the document's direction, and the reason is
-	   written in js/chart.js too. */
+	height: 108px;
+	/* The drawing direction is fixed LTR even in a Persian document: a time
+	   series that runs right-to-left reads as "the future is on the left", and
+	   the numbers on the axis stay LTR per the same rule CONTEXT.md gives them.
+	   This is the one place the page overrides the document's direction. */
 	direction: ltr;
 }
 
 .legend {
 	display: flex;
 	gap: var(--sp-4);
-	padding: var(--sp-2) var(--sp-4) var(--sp-3);
+	padding: var(--sp-2) var(--sp-3) var(--sp-3);
 	font-family: var(--mono);
-	font-size: 11px;
+	font-size: var(--text-xs);
 	color: var(--text-dim);
 	font-variant-numeric: tabular-nums;
 }
@@ -135,7 +272,7 @@
 }
 
 .legend__swatch {
-	width: 10px;
+	width: 12px;
 	height: 2px;
 	border-radius: 1px;
 }
@@ -145,36 +282,28 @@
 
 .legend__value { color: var(--text); }
 
-/* ---- selected row -------------------------------------------------------- */
-
-/* Selection is a background AND an inset ring: the background alone disappears
-   against a selected dark row, and the ring alone reads as a focus indicator
-   rather than a selection. */
-.row.is-selected {
-	background: var(--surface-hi);
-	box-shadow: inset 0 0 0 1px var(--focus);
-}
-
-/* ---- setup --------------------------------------------------------------- */
-
-.setup__cmd {
-	/* In an RTL paragraph a code span still has to read left to right, or the
-	   backslashes in a Windows path come out mirrored. */
-	direction: ltr;
-	unicode-bidi: embed;
-	text-align: start;
-}
-
-/* ---- shortcuts dialog ---------------------------------------------------- */
+/* ---- dialogs ------------------------------------------------------------
+   A bottom sheet on a phone and a centred card on a desktop, from ONE set of
+   rules: the difference is entirely where the panel is placed. */
 
 .dialog {
 	position: fixed;
 	inset: 0;
 	display: flex;
-	align-items: center;
+	/* Anchored to the bottom on narrow screens, where a thumb can reach it. */
+	align-items: flex-end;
 	justify-content: center;
-	background: rgba(0, 0, 0, .55);
+	background: rgba(0, 0, 0, 0.55);
+	-webkit-backdrop-filter: blur(2px);
+	backdrop-filter: blur(2px);
 	z-index: 20;
+	animation: fade-in var(--dur-2) var(--ease-standard) both;
+	padding: 0;
+}
+
+@keyframes fade-in {
+	from { opacity: 0; }
+	to   { opacity: 1; }
 }
 
 .dialog[hidden] { display: none; }
@@ -182,228 +311,78 @@
 .dialog__panel {
 	background: var(--surface);
 	border: 1px solid var(--line-strong);
-	border-radius: var(--r3);
-	box-shadow: var(--shadow);
-	padding: var(--sp-6);
-	/* Wide enough for the settings grid to get more than one column. At 420px the
-	   grid's 200px tracks fitted exactly one, and twelve fields became a dialog
-	   taller than the window - with the save button off the bottom. */
-	min-width: min(720px, 92vw);
-	max-width: 92vw;
-	/* The other half of the same problem: twelve fields plus two legends plus the
-	   notes plus the buttons is more than any window has, so the panel scrolls
-	   rather than growing past the frame. */
-	max-height: 88vh;
+	border-radius: var(--r-4) var(--r-4) 0 0;
+	box-shadow: var(--shadow-3);
+	padding: var(--sp-4) var(--sp-4) calc(var(--sp-5) + env(safe-area-inset-bottom));
+	width: 100%;
+	max-height: 92vh;
 	overflow: auto;
+	/* The panel rises rather than appearing: a sheet that slides up is the one
+	   animation that carries meaning here, because it says where the panel came
+	   from and that dismissing it will return it. */
+	animation: sheet-in var(--dur-3) var(--ease-spring) both;
+}
+
+@keyframes sheet-in {
+	from { transform: translateY(24px); opacity: 0.6; }
+	to   { transform: none; opacity: 1; }
 }
 
 .dialog__head {
 	display: flex;
 	align-items: baseline;
 	justify-content: space-between;
-	gap: var(--sp-6);
+	gap: var(--sp-4);
 	margin-block-end: var(--sp-4);
 }
 
 .dialog__title {
 	margin: 0;
-	font-size: 14px;
-	font-weight: 600;
+	font-family: var(--font-display);
+	font-size: var(--text-lg);
+	font-weight: 650;
+	letter-spacing: var(--track-tight);
 }
 
 .dialog__close {
 	background: none;
 	border: none;
 	color: var(--text-faint);
-	font-family: var(--font);
-	font-size: 12px;
+	font-size: var(--text-sm);
 	cursor: pointer;
-	padding: 0;
+	padding: var(--sp-1);
 }
 
 .dialog__close:hover { color: var(--text); }
 
-/* white-space: pre so the alignment of the two columns survives, and `direction:
-   ltr` because a key list is read left to right even in an RTL dialog. */
+/* A settings dialog that cannot tell you which file it edits is a settings dialog
+   a user will not trust with a portable install. */
+.dialog__path {
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+	max-width: 48ch;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	direction: ltr;
+}
+
+/* white-space: pre so the two columns of the shortcut list stay aligned, and
+   LTR because a key list is read left to right even in a Persian dialog. */
 .dialog__body {
 	margin: 0;
 	font-family: var(--mono);
-	font-size: 12px;
-	line-height: 1.9;
+	font-size: var(--text-sm);
+	line-height: 2;
 	color: var(--text-dim);
 	white-space: pre;
 	direction: ltr;
 	text-align: start;
+	overflow-x: auto;
 }
 
-/* ---- toasts, RTL-aware ---------------------------------------------------- */
-
-.toast {
-	max-width: 420px;
-	/* The text follows the document direction, but a filename inside it must
-	   not: a mixed Persian sentence containing "100Mb.dat" is only legible if
-	   the name keeps its own direction. */
-	overflow-wrap: anywhere;
-}
-
-/* ---- RTL adjustments ----------------------------------------------------- */
-
-/* Logical properties do most of it. What is left is the handful of places where
-   the *meaning* of a side flips rather than the geometry. */
-
-/* The progress bar fills from the inline-start edge, which in fa is the right -
-   correct, because a progress bar that grows leftwards in an RTL layout reads as
-   the download going backwards. */
-.row__bar { margin-inline-start: 0; }
-
-/* Badges carry their own direction for the same reason as a filename: "BT" and
-   a tracker error must not be reordered by the surrounding sentence. */
-.badge {
-	direction: ltr;
-	unicode-bidi: isolate;
-}
-
-/* The status word is aria2's own vocabulary, unchanged and untranslated, so it
-   stays LTR even though its neighbours are Persian. */
-.row__state {
-	direction: ltr;
-	unicode-bidi: isolate;
-}
-
-/* Byte counts and rates are formatted by the native side and are numbers: LTR. */
-.row__done,
-.row__pct,
-.row__speed,
-.row__eta {
-	direction: ltr;
-	unicode-bidi: isolate;
-	text-align: start;
-}
-
-/* A card value is NOT automatically LTR, and forcing it is a bug I shipped and
-   then had to look at: the engine card holds a localized sentence ("در حال
-   آمازسازی — restarting"), and inside an LTR isolate the Persian run is reordered
-   around the em dash and then ellipsised away, so the card read "— در حال آماز".
-   Half a Persian word is worse than no status at all.
-   So a card value follows the document, and only the cards that hold a genuinely
-   LTR value - a filesystem path, a version - opt in with data-ltr. */
-.card__v[data-ltr] {
-	direction: ltr;
-	unicode-bidi: isolate;
-	text-align: start;
-}
-
-/* ---- buttons ----------------------------------------------------------- */
-
-/* One button style for every action in the app - a row button, a pane button, the
-   settings dialog's save. Three similar-but-different button styles is how a UI
-   ends up looking assembled rather than designed, and a destructive action needs
-   to look like a destructive action in both places. */
-.act {
-	padding: 2px var(--sp-2);
-	background: transparent;
-	border: 1px solid var(--line);
-	border-radius: var(--r1);
-	color: var(--text-dim);
-	font-family: var(--font);
-	font-size: 11px;
-	line-height: 1.6;
-	cursor: pointer;
-	white-space: nowrap;
-	transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease),
-		border-color var(--t-fast) var(--ease);
-}
-
-.act:hover:not(:disabled) {
-	background: var(--surface-hi);
-	color: var(--text);
-	border-color: var(--line-strong);
-}
-
-/* Disabled is a press in flight. It stays legible rather than fading to nothing:
-   "did my click land?" is exactly what the user is asking at that moment. */
-.act:disabled {
-	opacity: .5;
-	cursor: default;
-}
-
-/* Destructive by colour alone would fail for a colourblind user and in a
-   screenshot, so remove also carries the one glyph that means it. */
-.act[data-kind="remove"],
-.act[data-kind="forget"] {
-	color: var(--err);
-	border-color: var(--line);
-}
-
-.act[data-kind="remove"]:hover:not(:disabled),
-.act[data-kind="forget"]:hover:not(:disabled) {
-	background: var(--surface-hi);
-	border-color: var(--err);
-}
-
-.act[data-kind="retry"]:hover:not(:disabled) {
-	color: var(--accent);
-	border-color: var(--accent-dim);
-}
-
-.act--go {
-	color: var(--accent);
-	border-color: var(--accent-dim);
-	padding: var(--sp-1) var(--sp-4);
-	font-size: 12px;
-}
-
-.act--wide {
-	padding: var(--sp-1) var(--sp-4);
-	font-size: 12px;
-}
-
-/* ---- the row action strip ---------------------------------------------- */
-
-/* Between the badges and the status word, and hidden until the row is hovered or
-   selected. Always-visible buttons turn a 30-row queue into 90 buttons and hide
-   the download names behind them - but "hidden until hover" is not an option
-   either, because a keyboard user cannot hover. So the rule is hover OR selected,
-   and the selection ring from Phase 2 is what makes the keyboard path work. */
-.row__actions {
-	display: flex;
-	gap: var(--sp-1);
-	flex: 0 0 auto;
-	opacity: 0;
-	transition: opacity var(--t-fast) var(--ease);
-}
-
-.row:hover .row__actions,
-.row:focus-within .row__actions,
-.row.is-selected .row__actions {
-	opacity: 1;
-}
-
-/* ---- pane toolbar ------------------------------------------------------- */
-
-.pane__head {
-	flex-wrap: wrap;
-}
-
-.pane__tools {
-	display: flex;
-	gap: var(--sp-1);
-	flex: 0 0 auto;
-}
-
-/* ---- settings dialog ---------------------------------------------------- */
-
-.dialog__path {
-	font-family: var(--mono);
-	font-size: 10px;
-	color: var(--text-faint);
-	/* A settings dialog that cannot tell you which file it edits is a settings
-	   dialog a user will not trust with a portable install. */
-	max-width: 46ch;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	white-space: nowrap;
-}
+/* ---- the settings form -------------------------------------------------- */
 
 .fieldset {
 	border: none;
@@ -413,16 +392,18 @@
 
 .fieldset__legend {
 	padding: 0 0 var(--sp-2);
-	font-size: 10px;
-	font-weight: 600;
-	letter-spacing: 0.08em;
+	font-size: var(--text-xs);
+	font-weight: 700;
+	letter-spacing: var(--track-label);
 	text-transform: uppercase;
 	color: var(--text-faint);
 }
 
+/* The ONE place a raw pixel is allowed to appear, and it earns it: auto-fit with a
+   min track width is the only way a form grid works without knowing the width. */
 .grid {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	grid-template-columns: minmax(0, 1fr);
 	gap: var(--sp-3);
 }
 
@@ -436,47 +417,61 @@
 .field--wide { grid-column: 1 / -1; }
 
 .field__k {
-	font-size: 11px;
+	font-size: var(--text-xs);
 	color: var(--text-dim);
 }
 
 .field__v {
-	padding: var(--sp-2);
-	background: var(--bg);
+	padding: var(--sp-2) var(--sp-3);
+	background: var(--surface-hi);
 	border: 1px solid var(--line);
-	border-radius: var(--r1);
+	border-radius: var(--r-2);
 	color: var(--text);
 	font-family: var(--mono);
-	font-size: 12px;
+	font-size: var(--text-sm);
 	min-width: 0;
+	transition: border-color var(--dur-1) var(--ease-standard),
+		background-color var(--dur-1) var(--ease-standard);
 }
 
-.field__v--text { direction: ltr; text-align: start; }
+.field__v:focus {
+	background: var(--surface);
+	border-color: var(--accent);
+}
 
 /* The browser's own focus ring is fine here and is deliberately NOT suppressed:
    this is a form, and a form is the one place where the platform's affordances
    are better than the ones we would hand-roll. */
-.field__v:focus-visible {
-	border-color: var(--focus);
-	outline: none;
-}
+.field__v:focus-visible { border-color: var(--accent); outline: none; }
+
+.field__v--text { direction: ltr; text-align: start; }
 
 .check {
 	display: flex;
 	align-items: center;
 	gap: var(--sp-2);
-	font-size: 12px;
+	font-size: var(--text-sm);
 	color: var(--text-dim);
+	cursor: pointer;
+	/* 44px tall: a checkbox is the smallest touch target on a phone, and the
+	   default 13px square is not one. */
+	min-height: 44px;
+}
+
+.check input {
+	width: 18px;
+	height: 18px;
+	accent-color: var(--accent);
 	cursor: pointer;
 }
 
 .notes {
 	margin: 0 0 var(--sp-4);
-	padding: var(--sp-2) var(--sp-3);
+	padding: var(--sp-3);
 	background: var(--surface-hi);
 	border-inline-start: 3px solid var(--warn);
-	border-radius: var(--r1);
-	font-size: 11px;
+	border-radius: var(--r-2);
+	font-size: var(--text-xs);
 	color: var(--text-dim);
 }
 
@@ -486,25 +481,549 @@
 	display: flex;
 	justify-content: flex-end;
 	gap: var(--sp-2);
-	padding-block-start: var(--sp-3);
+	padding-block-start: var(--sp-4);
 	border-block-start: 1px solid var(--line);
 }
 
-/* ---- narrow windows ------------------------------------------------------ */
+/* ---- the navigation, and the pause between layouts ----------------------
 
-/* At the width a 1360x880 window actually is there is room for everything; this
-   is for a user who has the window narrow, where three panes stop working. */
-@media (max-width: 980px) {
-	.panes {
-		grid-template-columns: minmax(0, 1fr);
-		grid-template-rows: minmax(0, 1fr) auto;
+   Below 900px the three panes are tabs; at 900px the tab bar is gone and the
+   panes are all visible. These are the rules that make that a real layout change
+   rather than a media query that only hides a control. */
+
+@media (min-width: 540px) {
+	.dialog { align-items: center; padding: var(--sp-5); }
+
+	.dialog__panel {
+		border-radius: var(--r-4);
+		width: auto;
+		min-width: min(520px, 100%);
+		max-width: 640px;
 	}
 
-	.pane--log { max-height: 200px; }
-	.addbar { max-width: none; }
+	@keyframes sheet-in {
+		from { transform: translateY(12px) scale(0.99); opacity: 0.5; }
+		to   { transform: none; opacity: 1; }
+	}
+
+	.grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
-@media (max-width: 720px) {
-	.cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-	.topbar { flex-wrap: wrap; }
+@media (min-width: 900px) {
+	.grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); }
+}
+
+/* ---- the app shell with two sidebars ------------------------------------
+   base.css flexes .app as a column; the sidebar + main split goes around that,
+   so the header is INSIDE .main rather than a sibling of .panes. That is what
+   lets the sidebar shrink to nothing while the menu still spans the content. */
+
+.shell {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
+.main {
+	display: flex;
+	flex-direction: column;
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 0;
+}
+
+/* ---- the main sidebar --------------------------------------------------- */
+
+.sidebar {
+	display: none;               /* revealed at 900px, like the tabs are */
+	flex: 0 0 auto;
+	width: 196px;
+	flex-direction: column;
+	gap: var(--sp-1);
+	padding: var(--sp-3);
+	border-inline-end: 1px solid var(--line);
+	background: var(--surface);
+	overflow-y: auto;
+}
+
+@media (min-width: 900px) {
+	.sidebar { display: flex; }
+}
+
+.sidebar__nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+}
+
+.sidebar__item {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	width: 100%;
+	min-height: 32px;
+	padding: 0 var(--sp-2);
+	background: transparent;
+	border: none;
+	border-radius: var(--r-2);
+	color: var(--text-dim);
+	font-size: var(--text-sm);
+	font-weight: 550;
+	text-align: start;
+	cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease-standard),
+		color var(--dur-1) var(--ease-standard);
+}
+
+.sidebar__item:hover { background: var(--surface-hi); color: var(--text); }
+
+.sidebar__item.is-on {
+	background: var(--accent-quiet);
+	color: var(--accent);
+}
+
+/* The dot is the row hairline's colour, which is the row status colour, so the
+   category and the rows it contains share a colour without a second rule. */
+.sidebar__dot {
+	width: 7px;
+	height: 7px;
+	border-radius: var(--r-pill);
+	background: var(--text-faint);
+	flex: 0 0 auto;
+}
+
+.sidebar__dot[data-dot="active"]  { background: var(--accent); }
+.sidebar__dot[data-dot="waiting"] { background: var(--text-faint); }
+.sidebar__dot[data-dot="paused"]  { background: var(--warn); }
+.sidebar__dot[data-dot="done"]    { background: var(--ok); }
+
+.sidebar__count {
+	margin-inline-start: auto;
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
+}
+
+.sidebar__rule {
+	margin-block: var(--sp-3) var(--sp-2);
+	border-block-start: 1px solid var(--line);
+}
+
+.sidebar__add {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-block-start: var(--sp-2);
+	padding: var(--sp-1) var(--sp-2);
+	background: transparent;
+	border: 1px dashed var(--line-strong);
+	border-radius: var(--r-2);
+	color: var(--text-faint);
+	font-size: var(--text-xs);
+	cursor: pointer;
+}
+
+.sidebar__add:hover { color: var(--text); border-color: var(--accent); }
+.sidebar__del {
+	margin-inline-start: auto;
+	background: none;
+	border: none;
+	color: var(--text-faint);
+	cursor: pointer;
+	padding: 0 2px;
+	font-size: 14px;
+	line-height: 1;
+}
+.sidebar__del:hover { color: var(--err); }
+
+/* ---- search -------------------------------------------------------------- */
+
+.search {
+	position: relative;
+	display: flex;
+	align-items: center;
+	flex: 1 1 60px;
+	min-width: 60px;
+	max-width: 280px;
+}
+
+.search__icon {
+	position: absolute;
+	inset-inline-start: var(--sp-2);
+	color: var(--text-faint);
+	pointer-events: none;
+}
+
+.search__input {
+	width: 100%;
+	min-height: 26px;
+	padding: var(--sp-1) var(--sp-2);
+	padding-inline-start: calc(var(--sp-2) + 18px);
+	background: var(--surface-hi);
+	border: 1px solid var(--line);
+	border-radius: var(--r-pill);
+	color: var(--text);
+	font-size: var(--text-xs);
+	font-family: var(--font);
+}
+
+.search__input::placeholder { color: var(--text-faint); }
+.search__input:focus { background: var(--surface); border-color: var(--accent); }
+
+.search__kbd {
+	position: absolute;
+	inset-inline-end: var(--sp-2);
+	font-family: var(--mono);
+	font-size: 10px;
+	color: var(--text-faint);
+	background: var(--surface);
+	border: 1px solid var(--line);
+	border-radius: var(--r-1);
+	padding: 0 4px;
+	pointer-events: none;
+}
+
+.search__input:not(:placeholder-shown) ~ .search__kbd { display: none; }
+
+.search__hits {
+	margin: 0 0 var(--sp-2);
+	padding: var(--sp-2) var(--sp-3);
+	background: var(--surface-hi);
+	border-radius: var(--r-2);
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+}
+
+.search__hits[hidden] { display: none; }
+.search__hits mark {
+	background: var(--accent-quiet);
+	color: var(--accent);
+	border-radius: 2px;
+	padding: 0 1px;
+}
+
+/* A search NARROWS the queue; it never empties it under the user. */
+.row.is-hidden-by-search { display: none; }
+
+/* ---- settings sidebar ---------------------------------------------------- */
+
+.dialog--split {
+	align-items: center;
+	padding: var(--sp-5);
+}
+
+.settings {
+	display: flex;
+	gap: var(--sp-5);
+	min-height: 0;
+}
+
+.settings__nav {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	flex: 0 0 auto;
+	width: 152px;
+	border-inline-end: 1px solid var(--line);
+	padding-inline-end: var(--sp-3);
+}
+
+.settings__navitem {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	min-height: 32px;
+	padding: 0 var(--sp-2);
+	background: transparent;
+	border: none;
+	border-radius: var(--r-2);
+	color: var(--text-dim);
+	font-size: var(--text-sm);
+	font-weight: 550;
+	text-align: start;
+	cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease-standard),
+		color var(--dur-1) var(--ease-standard);
+}
+
+.settings__navitem:hover { background: var(--surface-hi); color: var(--text); }
+.settings__navitem.is-on { background: var(--accent-quiet); color: var(--accent); }
+.settings__body { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; }
+.settings-page { display: none; }
+.settings-page.is-on { display: block; }
+
+.hint {
+	margin: 0 0 var(--sp-3);
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+}
+
+.catlist {
+	list-style: none;
+	margin: 0 0 var(--sp-3);
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--sp-1);
+}
+
+.catlist__row {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+}
+
+.catlist__name {
+	flex: 1 1 auto;
+	min-width: 0;
+	min-height: 28px;
+	padding: var(--sp-1) var(--sp-2);
+	background: var(--surface-hi);
+	border: 1px solid var(--line);
+	border-radius: var(--r-2);
+	color: var(--text);
+	font-size: var(--text-sm);
+}
+
+.row-add { display: flex; gap: var(--sp-2); }
+.row-add .field__v { flex: 1 1 auto; }
+
+.act--tiny {
+	min-height: 22px;
+	padding: 0 var(--sp-2);
+	font-size: var(--text-xs);
+}
+
+/* ---- the picker, and the folder suggestion ------------------------------- */
+
+.picker {
+	margin-block: var(--sp-3);
+	border: 1px solid var(--line);
+	border-radius: var(--r-2);
+	background: var(--surface-hi);
+}
+
+.picker__bar {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	padding: var(--sp-2) var(--sp-3);
+	border-block-end: 1px solid var(--line);
+}
+
+.picker__count {
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+	margin-inline-end: auto;
+}
+
+.picker__list {
+	list-style: none;
+	margin: 0;
+	padding: var(--sp-1);
+	max-height: 148px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+
+.picker__row {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	padding: var(--sp-1) var(--sp-2);
+	border-radius: var(--r-1);
+	font-size: var(--text-xs);
+	font-family: var(--mono);
+	direction: ltr;
+	text-align: start;
+}
+
+.picker__row:hover { background: var(--surface-hover); }
+.picker__row input { flex: 0 0 auto; accent-color: var(--accent); }
+.picker__label {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.picker__kind { flex: 0 0 auto; font-size: 10px; color: var(--accent); }
+
+/* A detected folder is an OFFER, not a setting: the dialog shows what it would do
+   and the user can disagree. One click puts it in the field. */
+.folder-hint {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-block-start: var(--sp-2);
+	padding: var(--sp-2) var(--sp-3);
+	background: var(--accent-quiet);
+	border-radius: var(--r-2);
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+}
+
+.folder-hint[hidden] { display: none; }
+.folder-hint__path {
+	font-family: var(--mono);
+	direction: ltr;
+	color: var(--accent);
+}
+
+.clipboard {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	margin-block-end: var(--sp-3);
+}
+
+.clipboard__hint { font-size: var(--text-xs); color: var(--text-faint); }
+
+/* ---- the details dialog -------------------------------------------------- */
+
+.detail {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 0;
+	margin: 0;
+}
+
+.detail__row {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sp-3);
+	padding: var(--sp-1) var(--sp-2);
+	border-radius: var(--r-1);
+	font-size: var(--text-sm);
+}
+
+.detail__row:nth-child(odd) { background: var(--surface-hi); }
+
+.detail__k {
+	flex: 0 0 auto;
+	min-width: 108px;
+	color: var(--text-faint);
+	font-size: var(--text-xs);
+}
+
+.detail__v {
+	flex: 1 1 auto;
+	min-width: 0;
+	margin: 0;
+	direction: ltr;
+	text-align: start;
+	white-space: pre-wrap;
+	word-break: break-all;
+	color: var(--text);
+}
+
+.detail__v--list {
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	line-height: 1.8;
+	max-height: 132px;
+	overflow-y: auto;
+	direction: ltr;
+}
+
+/* ---- the menu ------------------------------------------------------------ */
+
+/* A popover rather than a dialog: it closes on any click outside it, it does not
+   take the focus, and it is where the user put the pointer. A modal for "pause
+   all" would be a modal that has to be dismissed to see its own effect. */
+.tools { position: relative; }
+
+.menu {
+	position: absolute;
+	inset-block-start: calc(100% + 6px);
+	inset-inline-end: 0;
+	z-index: 40;
+	min-width: 208px;
+	padding: var(--sp-2);
+	background: var(--glass-bg);
+	-webkit-backdrop-filter: blur(var(--glass)) saturate(140%);
+	backdrop-filter: blur(var(--glass)) saturate(140%);
+	border: 1px solid var(--line-strong);
+	border-radius: var(--r-3);
+	box-shadow: var(--shadow-3);
+	animation: menu-in var(--dur-2) var(--ease-spring) both;
+}
+
+@keyframes menu-in {
+	from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+	to   { opacity: 1; transform: none; }
+}
+
+.menu[hidden] { display: none; }
+
+.menu__group { padding-block: var(--sp-1); }
+
+.menu__group + .menu__group {
+	border-block-start: 1px solid var(--line);
+	margin-block-start: var(--sp-1);
+}
+
+.menu__label {
+	margin: 0 0 var(--sp-1) var(--sp-2);
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: var(--track-label);
+	text-transform: uppercase;
+	color: var(--text-faint);
+}
+
+.menu__item {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	width: 100%;
+	min-height: 30px;
+	padding: 0 var(--sp-2);
+	background: transparent;
+	border: none;
+	border-radius: var(--r-2);
+	color: var(--text-dim);
+	font-size: var(--text-sm);
+	text-align: start;
+	cursor: pointer;
+	transition: background-color var(--dur-1) var(--ease-standard),
+		color var(--dur-1) var(--ease-standard);
+}
+
+.menu__item:hover { background: var(--surface-hover); color: var(--text); }
+.menu__item--danger:hover { color: var(--err); }
+.menu__item svg { flex: 0 0 auto; opacity: 0.8; }
+
+/* ---- the bits the two sidebars and the picker need ---------------------- */
+
+/* A named category's colour, shown as a dot in the sidebar and a swatch in the
+   settings editor. Both read the same custom property, so a category's colour is
+   set in one place - the settings list - and everywhere else follows. */
+.sidebar__swatch {
+	width: 8px;
+	height: 8px;
+	border-radius: var(--r-pill);
+	flex: 0 0 auto;
+}
+
+/* The developer log's own header: the hint on the start, the line count on the
+   end. The count is the promise that something was written. */
+.dev__bar {
+	display: flex;
+	align-items: baseline;
+	gap: var(--sp-2);
+	margin-block-end: var(--sp-2);
+}
+
+.dev__bar .hint { flex: 1 1 auto; }
+
+.dev__count {
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-faint);
+	font-variant-numeric: tabular-nums;
 }

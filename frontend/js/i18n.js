@@ -34,28 +34,55 @@
 			"lang.name": "English",
 			"app.tagline": "aria2 download manager · built on vails",
 
-			"card.engine": "engine",
-			"card.speed": "speed",
-			"card.queue": "queue",
-			"card.aria2": "aria2c",
-			"card.transport": "transport",
-			"card.bridge": "bridge",
-
-			// Short, because this lives in a card that ellipsises. The long version
-			// ("packed document (set_html)") is what I wrote first, and it rendered as
-			// "packed document (set_ht…" - which tells a user nothing, because the
-			// interesting half is the part that got cut.
+			// Short, because this lives in a log line. The long version
+			// ("packed document (set_html)") is what I wrote first, and it rendered
+			// as "packed document (set_ht…" - which tells a user nothing, because
+			// the interesting half is the part that got cut.
 			"transport.packed": "packed",
 			"transport.dev": "dev :${port}",
 
 			"pane.downloads": "downloads",
 			"pane.log": "engine log",
 			"pane.speed": "speed",
+			"search.placeholder": "search the queue…",
+			"search.hits": "{n} of {total} rows match “{q}”",
+			"search.none": "no rows match “{q}”",
 
 			"empty.queue": "Nothing queued. Add a URL above.",
 			"add.placeholder": "https://  ·  magnet:?xt=urn:btih:…  ·  C:\\path\\to\\file.torrent",
-			"add.aria": "URL, magnet link or path to a .torrent to download",
+			"add.aria": "a url, a magnet link, or a path to a .torrent",
 			"add.button": "Add",
+			"add.advanced": "Add with options (Enter)",
+			"add.title": "Add downloads",
+			"add.mode": "Add mode",
+			"add.mode.simple": "simple",
+			"add.mode.advanced": "advanced",
+			"add.uris.long": "one address per line — a url, a magnet, or a path to a .torrent",
+			"add.uris.placeholder": "https://example.com/file.bin\nmagnet:?xt=urn:btih:…\nC:\\path\\to\\file.torrent",
+			"add.clipboard": "read the clipboard",
+			"add.clipboard.hint": "the browser may ask first; nothing is read until you click",
+			"add.clipboard.done": "{n} address(es) read from the clipboard",
+			"add.clipboard.empty": "the clipboard has no address in it",
+			"add.clipboard.failed": "the clipboard could not be read: {detail}",
+			"add.pick.all": "all",
+			"add.pick.none": "none",
+			"add.pick.count": "{n} of {total} selected",
+			"add.kind.url": "url",
+			"add.kind.magnet": "magnet",
+			"add.kind.torrent": "torrent",
+			"add.out": "file name (optional)",
+			"add.connections": "connections each",
+			"add.paused": "add paused",
+			"add.legend.this": "for these downloads",
+			"add.submit": "add",
+			"add.none": "nothing selected to add",
+			// The folder suggestion. The wording is "suggested" and not "found",
+			// because it is a guess from the URL's last path segment and the user is
+			// entitled to disagree with it.
+			"add.folder.suggested": "suggested folder, from the address:",
+			"add.folder.use": "use it",
+			"add.folder.empty": "nothing recognisable in the address to suggest from",
+			"add.added": "Added {name}",
 
 			"setup.title": "aria2c is not installed",
 			"setup.note": "Then restart Fluxget. It picks the binary up from runtime\\ automatically.",
@@ -72,13 +99,12 @@
 "theme.toggle": "theme",
 			"locale.toggle": "language",
 			"shortcuts.title": "Keyboard shortcuts",
+			"shortcuts.open": "?",
 			"shortcuts.close": "close",
-			// Only keys that are actually bound. The list used to promise space,
-			// ctrl+arrows and pause/resume, none of which were wired - and a help
-			// dialog that documents features which do not exist is worse than no
-			// help dialog, because it teaches the reader to trust the wrong thing.
-			// Pause, resume and reorder are Phase 3 commands; the line comes back
-			// in the same commit that adds them.
+			// Only keys that are actually bound, and the wording of each line is what
+			// the key DOES rather than a name for it. A help dialog that documents a
+			// key which is not wired is worse than no dialog: it teaches the reader to
+			// trust the wrong thing.
 			"shortcuts.body":
 				"/            focus the add box\n" +
 				"\u2191 \u2193          select a download\n" +
@@ -86,11 +112,13 @@
 				"ctrl + \u2191 \u2193   move it in the queue\n" +
 				"delete       remove the selection\n" +
 				"r            retry the selection\n" +
-				"a            add whatever is in the add box\n" +
+				"enter        open the selection's details\n" +
+				"a            open the add dialog\n" +
 				"s            settings\n" +
 				"t            toggle the theme\n" +
 				"l            toggle fa / en\n" +
 				"?            this list\n" +
+				"m            this app's menu\n" +
 				"esc          close this",
 			"shortcuts.none-selected": "Nothing is selected. The arrow keys select a download.",
 			"shortcuts.not-applicable": "{action} does not apply to this download.",
@@ -109,9 +137,52 @@
 			"queue.resumeall": "resume all",
 			"queue.clear": "clear history",
 
+			"menu.title": "the app's menu",
+			"menu.group.downloads": "the queue",
+			"menu.group.app": "the app",
+
+			"nav.categories": "the categories",
+			"sidebar.rule": "your categories",
+			"sidebar.new": "new category",
+			"cat.all": "all",
+			"cat.active": "downloading",
+			"cat.waiting": "queued",
+			"cat.paused": "paused",
+			"cat.done": "finished & failed",
+			"category.new.prompt": "a name for the new category",
+			"category.deleted": "Removed {name}",
+			"category.added": "Added {name}",
+
+			"details.title": "details",
+			"details.actions": "actions",
+			"details.gid": "gid",
+			"details.status": "status",
+			"details.dir": "folder",
+			"details.total": "size",
+			"details.done": "downloaded",
+			"details.uploaded": "uploaded",
+			"details.speed": "downloading at",
+			"details.upload": "uploading at",
+			"details.eta": "time left",
+			"details.connections": "connections",
+			"details.pieces": "pieces",
+			"details.piece_length": "piece length",
+			"details.verified_length": "verified",
+			"details.info_hash": "info hash",
+			"details.seeders": "seeders",
+			"details.leechers": "leechers",
+			"details.trackers": "trackers",
+			"details.files": "files",
+			"details.uris": "addresses",
+			"details.live": "in use",
+			"details.idle": "not in use",
+			"details.failed": "could not read this download: {detail}",
+			"details.none": "nothing selected",
+
 			// ---- settings
 			"settings.open": "settings",
 			"settings.title": "Settings",
+			"settings.dev.title": "developer",
 			"settings.save": "save",
 			"settings.cancel": "close",
 			"settings.saved": "Settings saved and applied.",
@@ -129,29 +200,12 @@
 			"settings.seed_ratio": "seed ratio",
 			"settings.seed_time": "seed time (min, 0 = forever)",
 			"settings.refused": "Not applied: {detail}",
-			"settings.bad-payload": "The settings came back unreadable: {detail}",
-
-			"engine.never-started": "not started yet",
-			"engine.missing": "not installed",
-			"engine.starting": "starting…",
-			"engine.ready": "ready",
-			"engine.crashed": "crashed",
-			"engine.stopping": "stopping",
-			"engine.stopped": "stopped",
-			"engine.retrying": "retrying in {n}s",
-			"engine.source": "via {source}"
+			"settings.bad-payload": "The settings came back unreadable: {detail}"
 		},
 
 		fa: {
 			"lang.name": "فارسی",
 			"app.tagline": "مدیریت دانلود aria2 · ساخته‌شده با vails",
-
-			"card.engine": "موتور",
-			"card.speed": "سرعت",
-			"card.queue": "صف",
-			"card.aria2": "aria2c",
-			"card.transport": "انتقال",
-			"card.bridge": "پل",
 
 			"transport.packed": "بسته‌شده",
 			"transport.dev": "توسعه :${port}",
@@ -161,9 +215,42 @@
 			"pane.speed": "نمودار سرعت",
 
 			"empty.queue": "صف خالی است. یک نشانی بالا بیفزایید.",
+			"search.placeholder": "جست‌وجو در صف…",
+			"search.hits": "{n} از {total} ردیف با «{q}» می‌خواند",
+			"search.none": "هیچ ردیفی با «{q}» نمی‌خواند",
 			"add.placeholder": "https://  ·  magnet:?xt=urn:btih:…  ·  C:\\path\\to\\file.torrent",
-			"add.aria": "نشانی، پیوند مگنت یا مسیر یک فایل تورنت برای دانلود",
+			"add.aria": "نشانی، پیوند مگنت یا مسیر یک فایل تورنت",
 			"add.button": "افزودن",
+			"add.advanced": "افزودن با گزینه‌ها (Enter)",
+			"add.title": "افزودن دانلود",
+			"add.mode": "حالت افزودن",
+			"add.mode.simple": "ساده",
+			"add.mode.advanced": "پیشرفته",
+			"add.uris.long": "هر نشانی در یک سطر — وب‌نشانی، مگنت، یا مسیر یک فایل تورنت",
+			"add.uris.placeholder": "https://example.com/file.bin\nmagnet:?xt=urn:btih:…\nC:\\path\\to\\file.torrent",
+			"add.clipboard": "خواندن برگه‌دان (کلیپ‌بورد)",
+			"add.clipboard.hint": "مرورگر ممکن است بپرسد؛ تا کلیک شما چیزی خوانده نمی‌شود",
+			"add.clipboard.done": "{n} نشانی از برگه‌دان خوانده شد",
+			"add.clipboard.empty": "نشانی‌ای در برگه‌دان نیست",
+			"add.clipboard.failed": "برگه‌دان خوانده نشد: {detail}",
+			"add.pick.all": "همه",
+			"add.pick.none": "هیچ",
+			"add.pick.count": "{n} از {total} انتخاب‌شده",
+			"add.kind.url": "وب",
+			"add.kind.magnet": "مگنت",
+			"add.kind.torrent": "تورنت",
+			"add.out": "نام فایل (اختیاری)",
+			"add.connections": "اتصال برای هرکدام",
+			"add.paused": "افزودن در حالت مکث",
+			"add.legend.this": "برای این دانلودها",
+			"add.submit": "افزودن",
+			"add.none": "چیزی برای افزودن انتخاب نشده است",
+			// The folder suggestion is a guess from the URL's last path segment, so
+			// the wording says "suggested" and not "found" - the user can disagree.
+			"add.folder.suggested": "پوشهٔ پیشنهادی، از نشانی:",
+			"add.folder.use": "استفاده کن",
+			"add.folder.empty": "از این نشانی چیزی برای پیشنهاد گزارش نمی‌شود",
+			"add.added": "{name} افزوده شد",
 
 			"setup.title": "aria2c نصب نیست",
 			"setup.note": "سپس Fluxget را دوباره اجرا کنید. مسیر آن را خودکار از runtime\\ پیدا می‌کند.",
@@ -180,6 +267,7 @@
 			"theme.toggle": "پوسته",
 			"locale.toggle": "زبان",
 			"shortcuts.title": "کلیدهای میان‌بر",
+			"shortcuts.open": "?",
 			"shortcuts.close": "بستن",
 			"shortcuts.body":
 				"/            رفتن به کادر افزودن\n" +
@@ -211,9 +299,58 @@
 			"queue.resumeall": "ادامهٔ همه",
 			"queue.clear": "پاک کردن تاریخچه",
 
+			"menu.title": "منوی برنامه",
+			"menu.group.downloads": "صف",
+			"menu.group.app": "برنامه",
+
+			"nav.categories": "دسته‌ها",
+			"sidebar.rule": "دسته‌های شما",
+			"sidebar.new": "دستهٔ تازه",
+			"cat.all": "همه",
+			"cat.active": "در حال دانلود",
+			"cat.waiting": "در صف",
+			"cat.paused": "متوقف",
+			"cat.done": "پایان‌یافته و ناموفق",
+			"category.new.prompt": "نامی برای دستهٔ تازه",
+			"category.deleted": "{name} حذف شد",
+			"category.added": "{name} افزوده شد",
+
+			"details.title": "جزئیات",
+			"details.actions": "کنش‌ها",
+			"details.gid": "شناسه",
+			"details.status": "وضعیت",
+			"details.dir": "پوشه",
+			"details.total": "اندازه",
+			"details.done": "دانلودشده",
+			"details.uploaded": "بارگذاری‌شده",
+			"details.speed": "سرعت دانلود",
+			"details.upload": "سرعت بارگذاری",
+			"details.eta": "زمان مانده",
+			"details.connections": "اتصال‌ها",
+			"details.pieces": "تکه‌ها",
+			"details.piece_length": "اندازهٔ تکه",
+			"details.verified_length": "بررسی‌شده",
+			"details.info_hash": "هش تورنت",
+			"details.seeders": "بذرگذار",
+			"details.leechers": "دریافت‌کننده",
+			"details.trackers": "رهگیرها",
+			"details.files": "فایل‌ها",
+			"details.uris": "نشانی‌ها",
+			"details.live": "در دست استفاده",
+			"details.idle": "بی‌استفاده",
+			"details.failed": "جزئیات خوانده نشد: {detail}",
+			"details.none": "چیزی انتخاب نشده است",
+
 			// ---- settings
 			"settings.open": "تنظیمات",
 			"settings.title": "تنظیمات",
+			"settings.dev.title": "توسعه‌دهنده",
+			"settings.dev.hint": "this is aria2's own output plus what Fluxget logs about itself. it is only written, never read back.",
+			"settings.legend.categories": "دسته‌ها",
+			"settings.categories.hint": "دسته‌ها برچسبی‌اند که خودتان می‌سازید. برای افزودن یک دانلود به یک دسته، در پنجرهٔ جزئیات آن را انتخاب کنید.",
+			"settings.categories.new": "نام دستهٔ تازه",
+			"settings.categories.add": "افزودن",
+			"settings.categories.one": "دسته‌ها باید نام داشته باشند.",
 			"settings.save": "ذخیره",
 			"settings.cancel": "بستن",
 			"settings.saved": "تنظیمات ذخیره و اعمال شد.",
@@ -231,17 +368,7 @@
 			"settings.seed_ratio": "نسبت پخش",
 			"settings.seed_time": "زمان پخش (دقیقه، ۰ = همیشه)",
 			"settings.refused": "اعمال نشد: {detail}",
-			"settings.bad-payload": "تنظیمات خوانده نشد: {detail}",
-
-			"engine.never-started": "هنوز آغاز نشده",
-			"engine.missing": "نصب نیست",
-			"engine.starting": "در حال آغاز…",
-			"engine.ready": "آماده",
-			"engine.crashed": "سقوط کرد",
-			"engine.stopping": "در حال خاموش شدن",
-			"engine.stopped": "متوقف",
-			"engine.retrying": "تلاش دوباره در {n} ثانیه",
-			"engine.source": "از {source}"
+			"settings.bad-payload": "تنظیمات خوانده نشد: {detail}"
 		}
 	};
 
