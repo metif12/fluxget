@@ -586,8 +586,17 @@ button, input, select, textarea {
 
 /* ---- the window gets wider -------------------------------------------- */
 
-/* Two columns of cards, and the queue grows: at 540px the panes are still one at a
-   time, because a phone-width pane containing three panes is not a layout. */
+/* The shell is a ROW: the sidebar beside the content, both below the header, which
+   is a full-width band above them. The header used to live inside the content
+   column, so it stopped short of the queue's sidebar and read as three separate
+   widgets rather than one app bar. */
+.shell {
+	display: flex;
+	flex: 1 1 auto;
+	min-height: 0;
+	min-width: 0;
+}
+
 @media (min-width: 540px) {
 	.cards {
 		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -601,54 +610,27 @@ button, input, select, textarea {
 	.toasts { inset-inline: var(--sp-4); }
 }
 
-/* From here the tab bar is gone and the panes share the space. */
+/* From here the tab bar is gone and the panes are all visible. */
 @media (min-width: 900px) {
+	.sidebar { display: flex; }
+
+	/* ONE column, stacked: the queue takes the height and the chart is a strip
+	   along the bottom edge. The queue used to share its width with a chart that
+	   had nowhere to go underneath, which cost every file name a third of its
+	   space to draw a graph with no room under it to explain itself. */
 	.panes {
-		display: grid;
-		grid-template-columns: minmax(0, 1.9fr) minmax(0, 1fr);
-		gap: var(--sp-3);
+		display: flex;
+		flex-direction: column;
 		padding-block: var(--sp-3);
 	}
 
 	.pane { display: flex; }
 	.tabbar { display: none; }
-	.toasts { inset-block-end: var(--sp-6); inset-inline-end: var(--sp-6); inset-inline-start: auto; max-width: 460px; }
 
-	/* The chart and the log become the second column, stacked. */
-	.pane-column {
-		display: flex;
-		flex-direction: column;
-		gap: var(--sp-3);
-		min-width: 0;
-		min-height: 0;
+	.toasts {
+		inset-block-end: var(--sp-6);
+		inset-inline-end: var(--sp-6);
+		inset-inline-start: auto;
+		max-width: 460px;
 	}
-
-	.pane--chart { flex: 0 0 auto; }
-	.pane--log   { flex: 1 1 auto; min-height: 140px; }
-}
-
-@media (min-width: 1180px) {
-	.panes { grid-template-columns: minmax(0, 1.7fr) minmax(0, 0.9fr); }
-}
-
-/* ---- the topbar, centred and tidy ----------------------------------------
-   The header holds four things and they now sit on one line with a defined order:
-   the brand, the add draft, the search, the toggles. `margin-inline: auto` on the
-   brand is what makes it visually centred against the controls rather than
-   against the edge, and it is an auto margin rather than a text-align because
-   text-align on a flex container does nothing. */
-
-.topbar { flex-wrap: nowrap; }
-
-/* The header is three parts with the middle one flexible, and NO auto margins:
-   in a flex row an `auto` margin distributes the leftover space, which in an RTL
-   document pushes the brand to the far left and leaves the add box next to it.
-   Natural order does the right thing in both directions without a second rule to
-   forget. */
-.topbar__brand { flex: 0 0 auto; }
-
-.addbar {
-	flex: 1 1 auto;
-	min-width: 0;
-	max-width: 520px;
 }
