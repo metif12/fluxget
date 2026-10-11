@@ -81,7 +81,35 @@ pub mut:
 	// save_session is what makes a queue survive a restart. It is a preference
 	// and not a fact about the engine, so it belongs to us.
 	save_session bool
+	// categories are the user's own labels, alongside the built-in views the
+	// frontend derives from a row's status.
+	//
+	// They are stored because a category that vanishes on close is not a
+	// category, it is a filter - and a user who has filed twenty downloads under
+	// "Media" and then closed the window has lost the filing, not the downloads.
+	// They are the one collection in this document, and the only one that is
+	// capped and de-duplicated.
+	categories []Category
 }
+
+// Category is one user-owned label.
+//
+// A built-in category is derived from a row's status and cannot be deleted;
+// these are the ones a user made, which is why they are a separate thing rather
+// than a flag on some unified list. Mixing the two would let a user delete
+// "downloading" and lose the queue's ability to show what is downloading.
+pub struct Category {
+pub mut:
+	name string
+	// colour is a CSS colour, and it is a string rather than a token name so a
+	// user can pick any of them. An unknown value falls back to the accent at
+	// render time rather than breaking the document.
+	colour string
+}
+
+// max_categories caps how many a user can make, because a settings document that
+// grows without bound is a settings document nobody backs up.
+pub const max_categories = 24
 
 // defaults returns the shipped settings.
 //
@@ -177,7 +205,47 @@ pub fn (mut s Settings) normalise() []string {
 		s.seed_time = '60'
 		notes << 'seed_time: (empty) -> 60'
 	}
+	before := s.categories.len
+	s.categories = normalise(s.categories)
+	if s.categories.len != before {
+		notes << 'categories: ${before} -> ${s.categories.len}'
+	}
 	return notes
+}
+
+// normalise makes the category list well-formed, and returns a NEW list rather
+// than mutating the one it was given: a caller that holds the decoded array
+// still has the array the file described, which is what makes a "your file had
+// a problem" report honest instead of a description of what we fixed.
+//
+// Three rules, and each one is a way a hand-edited file goes wrong:
+//
+//  1. a blank name is dropped - an unnamed category is a row in a list with
+//     nothing to identify it;
+//  2. a duplicate name is dropped, keeping the FIRST - a second "Media" is
+//     indistinguishable from the first to the user and a second copy of the
+//     same label is how a queue ends up filed twice;
+//  3. the list is capped, keeping the earliest - the oldest is the one the user
+//     has already filed under.
+pub fn normalise(given []Category) []Category {
+	mut out := []Category{}
+	mut seen := map[string]bool{}
+	for c in given {
+		name := c.name.trim_space()
+		if name == '' || seen[name] {
+			continue
+		}
+		seen[name] = true
+		colour := c.colour.trim_space()
+		out << Category{
+			name:   name
+			colour: if colour == '' { 'var(--accent)' } else { colour }
+		}
+		if out.len >= max_categories {
+			break
+		}
+	}
+	return out
 }
 
 fn (c Clamp) clamp(v int) int {

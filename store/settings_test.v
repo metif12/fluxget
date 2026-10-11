@@ -344,3 +344,72 @@ fn test_the_path_env_var_wins_over_the_default_location() {
 	assert default_path().starts_with(home), '${default_path()} is not under ${home}'
 	assert default_path().ends_with('settings.json'), default_path()
 }
+
+// ---- categories ---------------------------------------------------------
+
+// Categories are the reason this module has a collection at all, and the only
+// place where normalise() has to be observable: a category that the loader drops
+// silently is a category the user cannot recover.
+
+fn test_categories_survive_a_save_and_a_load() {
+	p := scratch('cats.json')
+	mut s := defaults()
+	s.categories = [
+		store.Category{ name: 'Media', colour: '#4cc2ff' },
+		store.Category{ name: 'Docs', colour: '' },
+	]
+	s.save(p) or {
+		assert false, err.msg()
+		return
+	}
+	got, notes := load(p)
+	assert notes.len == 0, 'clean categories must not be corrected: ${notes}'
+	assert got.categories.len == 2, '${got.categories.len}'
+	assert got.categories[0].name == 'Media', got.categories[0].name
+	assert got.categories[1].colour == 'var(--accent)', 'an empty colour falls back: ${got.categories[1].colour}'
+}
+
+fn test_a_category_withou_a_name_is_dropped() {
+	assert store.normalise([store.Category{ name: '', colour: '#fff' }]).len == 0
+	assert store.normalise([store.Category{ name: '   ', colour: '#fff' }]).len == 0
+}
+
+fn test_a_duplicate_category_keeps_the_first() {
+	got := store.normalise([
+		store.Category{ name: 'Media', colour: '#111111' },
+		store.Category{ name: 'Media', colour: '#222222' },
+	])
+	assert got.len == 1, '${got.len}'
+	assert got[0].colour == '#111111', 'the first one should win: ${got[0].colour}'
+}
+
+fn test_an_empty_colour_falls_back_to_the_accent() {
+	got := store.normalise([store.Category{ name: 'Docs', colour: '' }])
+	assert got[0].colour == 'var(--accent)', got[0].colour
+}
+
+fn test_a_colour_is_kept_verbatim() {
+	got := store.normalise([store.Category{ name: 'Docs', colour: '#4cc2ff' }])
+	assert got[0].colour == '#4cc2ff', got[0].colour
+}
+
+fn test_the_category_list_is_capped() {
+	mut many := []store.Category{}
+	for i in 0 .. store.max_categories + 5 {
+		many << store.Category{ name: 'c${i}', colour: '#fff' }
+	}
+	got := store.normalise(many)
+	assert got.len == store.max_categories, '${got.len} should be capped at ${store.max_categories}'
+	assert got[0].name == 'c0', 'the earliest is the one already filed under: ${got[0].name}'
+}
+
+fn test_normalise_returns_a_new_list_rather_than_mutating_its_argument() {
+	mut given := []store.Category{}
+	given << store.Category{ name: 'bad name', colour: '#fff' }
+	given << store.Category{ name: '', colour: '#fff' }
+	_ := store.normalise(given)
+	// The caller still holds what the file described, which is what makes a
+	// "your file had a problem" report honest instead of a description of what we
+	// fixed.
+	assert given.len == 2, 'the argument was mutated: ${given.len}'
+}

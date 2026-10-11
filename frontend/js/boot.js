@@ -651,18 +651,6 @@
 		}
 	});
 
-	// The category list is rebuilt when a category is added or removed, and the
-	// built-in counts come from render_sidebar, which the tick calls.
-	el("category-add").addEventListener("click", function () {
-		var name = window.prompt(t("category.new.prompt"), "");
-		if (!name || !name.trim()) { return; }
-		var c = { id: "cat-" + Date.now(), name: name.trim(), colour: "var(--accent)" };
-		named_categories.push(c);
-		render_sidebar();
-		note({ kind: "info", text: window.I18n.fill(t("category.added"), { name: c.name }) });
-	});
-
-
 	// ---- dialogs ---------------------------------------------------------
 	//
 	// One helper for all of them, because they have the same three states (open,
@@ -828,9 +816,16 @@
 	el("mode-simple").addEventListener("click", function () { set_add_mode("simple"); });
 	el("mode-advanced").addEventListener("click", function () { set_add_mode("advanced"); });
 
-	el("adddialog").addEventListener("click", function () {
-		// The header box DRAFTS: whatever is in it seeds the dialog's textarea, so
-		// a single address still reaches the advanced settings in one gesture.
+	// The single Add entry point. The header box drafts; the dialog confirms, for
+	// one address or twenty, simple or advanced.
+	//
+	// It used to be two buttons - this one plus a second that opened the dialog -
+	// with two code paths for "add a download" that could drift apart, and a
+	// header with two icons that read the same way at a glance. `submit_add` was
+	// the second path and it is gone.
+	el("addbtn").addEventListener("click", function () {
+		// Whatever is in the box seeds the dialog, so a single address still
+		// reaches the advanced settings in one gesture.
 		if (el("addurl").value.trim()) {
 			el("add-uris").value = el("addurl").value.trim();
 			el("addurl").value = "";
@@ -1201,41 +1196,6 @@
 		});
 	}
 
-	// ---- the add box ------------------------------------------------------
-
-	function submit_add() {
-		var input = el("addurl");
-		var value = input.value.trim();
-		if (!value) { return; }
-		var btn = el("addbtn");
-		btn.disabled = true;
-		window.vails.call("fluxget.add", JSON.stringify({
-			uris: [value],
-			dir: "",
-			out: "",
-			paused: false
-		})).then(function (gid) {
-			// The gid is the only handle the rest of Fluxget has, so it is worth
-			// showing: it is what a bug report needs.
-			note({ kind: "added", gid: gid, name: short_path(value), text: value });
-			input.value = "";
-			tick();
-		}).catch(function (e) {
-			// Refusals are the native side's own sentences (aria2's message, or why
-			// the request was malformed). Shown verbatim rather than rephrased,
-			// because "add failed" is not something anyone can act on.
-			note({ kind: "failed", name: short_path(value), error: String(e), text: String(e) });
-		}).then(function () {
-			btn.disabled = false;
-			input.focus();
-		});
-	}
-
-	el("addform").addEventListener("submit", function (ev) {
-		ev.preventDefault();
-		submit_add();
-	});
-
 	// ---- the folder hint and the settings dialog's button ---------------
 
 	// The add dialog's folder suggestion is an OFFER: clicking it fills the folder
@@ -1315,7 +1275,9 @@
 				break;
 			case "a":
 				ev.preventDefault();
-				submit_add();
+				// The keyboard does exactly what the header's Add button does - one
+				// entry point, so the two cannot drift.
+				el("addbtn").click();
 				break;
 			case "s":
 				ev.preventDefault();
@@ -1421,6 +1383,18 @@
 			return;
 		}
 		var s = view.settings || {};
+		// The categories come from the document rather than from memory, so a
+		// restart keeps them. They are the one collection in the settings file.
+		named_categories = [];
+		for (var ci = 0; ci < (s.categories || []).length; ci++) {
+			named_categories.push({
+				id: "cat-" + ci,
+				name: (s.categories[ci] && s.categories[ci].name) || "",
+				colour: (s.categories[ci] && s.categories[ci].colour) || "var(--accent)"
+			});
+		}
+		render_category_editor();
+		render_sidebar();
 		set_number("max_concurrent", s.max_concurrent);
 		set_number("max_per_server", s.max_per_server);
 		set_number("split", s.split);
@@ -1444,6 +1418,70 @@
 	function set_text(field, value) {
 		el("set-" + field).value = typeof value === "string" ? value : "";
 	}
+
+	// ---- the category editor ----------------------------------------------
+	//
+	// A list of text inputs rather than a list of names, because a name you cannot
+	// rename is a name you cannot fix, and the fix is an input rather than a modal.
+
+	function read_category_editor() {
+		var rows = el("category-editor").querySelectorAll(".catlist__name");
+		var out = [];
+		for (var i = 0; i < rows.length; i++) {
+			var name = rows[i].value.trim();
+			if (!name) { continue; }
+			out.push({ name: name, colour: rows[i].getAttribute("data-colour") || "" });
+		}
+		return out;
+	}
+
+	function category_editor_row(c) {
+		var li = document.createElement("li");
+		li.className = "catlist__row";
+		var swatch = document.createElement("input");
+		swatch.className = "catlist__swatch";
+		swatch.type = "color";
+		swatch.value = /^#[0-9a-f]{6}$/i.test(c.colour) ? c.colour : "#4cc2ff";
+		swatch.setAttribute("data-colour", swatch.value);
+		swatch.addEventListener("change", function () {
+			this.setAttribute("data-colour", this.value);
+		});
+		var name = document.createElement("input");
+		name.className = "catlist__name";
+		name.value = c.name;
+		name.setAttribute("data-colour", swatch.value);
+		var del = document.createElement("button");
+		del.className = "act act--tiny";
+		del.setAttribute("type", "button");
+		del.textContent = "\u00d7";
+		del.title = t("settings.categories.remove");
+		del.addEventListener("click", function () {
+			this.parentNode.parentNode.removeChild(this.parentNode);
+		});
+		li.appendChild(swatch);
+		li.appendChild(name);
+		li.appendChild(del);
+		return li;
+	}
+
+	function render_category_editor() {
+		var list = el("category-editor");
+		list.innerHTML = "";
+		for (var i = 0; i < named_categories.length; i++) {
+			list.appendChild(category_editor_row(named_categories[i]));
+		}
+	}
+
+	el("category-add").addEventListener("click", function () {
+		var input = el("category-name");
+		var name = input.value.trim();
+		if (!name) {
+			show_settings_notes([t("settings.categories.one")]);
+			return;
+		}
+		el("category-editor").appendChild(category_editor_row({ name: name, colour: "" }));
+		input.value = "";
+	});
 
 	// show_settings_notes surfaces what the last save actually did.
 	//
@@ -1482,7 +1520,10 @@
 			bt_enabled: el("set-bt_enabled").checked,
 			seed_ratio: el("set-seed_ratio").value.trim(),
 			seed_time: el("set-seed_time").value.trim(),
-			save_session: el("set-save_session").checked
+			save_session: el("set-save_session").checked,
+			// The whole document, not a patch: the command replaces it, so omitting
+			// a field is how a category is lost rather than kept.
+			categories: read_category_editor()
 		};
 		var button = el("settings-save");
 		button.disabled = true;
@@ -1569,6 +1610,20 @@
 			log_line("bridge: ping → " + r);
 		}).catch(function (e) {
 			log_line("bridge: ping rejected: " + e);
+		});
+
+		// The categories are loaded ONCE at startup, not when Settings opens.
+		//
+		// They are the one part of the queue's own shape that is not in the tick,
+		// so they have to be fetched. Reading them only from fill_settings meant
+		// the sidebar showed the built-in views and NOTHING else until the user
+		// opened the settings dialog - which is a window that looks like it forgot
+		// your categories, and a restart was the only way to be sure they were
+		// gone.
+		window.vails.call("fluxget.get_settings", "").then(function (raw) {
+			fill_settings(raw);
+		}).catch(function (e) {
+			log_line("settings could not be read at startup: " + e);
 		});
 
 		tick();

@@ -30,67 +30,78 @@
 -->
 <div class="app" id="app" data-tab="downloads">
 
-	<header class="topbar">
-	<div class="topbar__brand">
-		<span class="topbar__mark" aria-hidden="true">
-			<svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor"
-				stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-				<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
-			</svg>
-		</span>
-		<span class="topbar__title">Fluxget</span>
-	</div>
-
-	<form class="addbar" id="addform" autocomplete="off">
+<header class="topbar">
 		<!--
-		  One box, one destination. It no longer submits on its own: every add
-		  goes through the dialog, so a paste of five URLs is one gesture rather
-		  than five, and the per-download settings are reachable from the same
-		  place the URL is typed. The box is only pre-filled here.
+		  The brand. One mark and one word, as a unit.
+		  It used to sit in its own column, which is what made the header read as
+		  three separate widgets rather than one bar.
 		-->
-		<span class="addbar__wrap">
-			<svg class="addbar__icon" viewBox="0 0 24 24" width="15" height="15" fill="none"
-				stroke="currentColor" stroke-width="2" stroke-linecap="round"
-				stroke-linejoin="round" aria-hidden="true">
-				<circle cx="11" cy="11" r="7" /><path d="M20 20l-4.3-4.3" />
-			</svg>
+		<a class="brand" href="#" id="brand">
+			<span class="brand__mark" aria-hidden="true">
+				<svg viewBox="0 0 32 32" width="22" height="22" fill="none" stroke="currentColor"
+					stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<path d="M16 4v14" /><path d="M8 13l8 8 8-8" /><path d="M5 26h22" />
+				</svg>
+			</span>
+			<span class="brand__title">Fluxget</span>
+		</a>
+
+		<!--
+		  Add. One box, one button, one destination - the dialog.
+
+		  There used to be TWO buttons here, one that added a single address and one
+		  that opened the dialog, and a <form> around the box that submitted on
+		  Enter. That left two code paths for "add a download" that could drift, and
+		  a header with two icons that read the same way at a glance. Now the box
+		  drafts and the button confirms, for one address or twenty, and the copy
+		  that lives in `submit_add` is gone.
+		-->
+		<div class="addbar">
 			<input class="addbar__input" id="addurl" type="text" spellcheck="false" dir="ltr"
 				data-i18n-attr="placeholder:add.placeholder" />
-		</span>
-		<button class="addbar__btn addbar__btn--ghost" id="adddialog" type="button"
-			data-i18n-attr="aria-label:add.advanced" title="">
-			<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
-				stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-				<path d="M4 6h16M4 12h16M4 18h10" />
-			</svg>
-		</button>
-		<button class="addbar__btn" id="addbtn" type="button" data-i18n="add.button">Add</button>
-	</form>
-
-	<!-- One segmented control for the four things you can toggle, rather than
-	     four loose buttons: they are the same kind of thing and grouping them
-	     says so. The locale button shows the language you would switch TO. -->
-	<div class="tools">
-		<div class="segmented">
-			<button class="tool" id="themebtn" type="button" aria-label="theme">
-				<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
-					stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-					<path d="M12 3a9 9 0 1 0 0 18z" fill="currentColor" stroke="none" />
-					<circle cx="12" cy="12" r="9" />
-				</svg>
-			</button>
-			<button class="tool" id="localebtn" type="button">فارسی</button>
-			<button class="tool" id="helpbtn" type="button" data-i18n="shortcuts.open">?</button>
+			<button class="addbar__btn" id="addbtn" type="button" data-i18n="add.button">Add</button>
 		</div>
-		<button class="tool tool--menu" id="menubtn" type="button"
-			data-i18n-attr="aria-label:menu.title">
-			<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
-				stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-				<path d="M4 6h16M4 12h16M4 18h16" />
-			</svg>
-		</button>
-	</div>
-</header>
+
+		<!--
+		  Four controls, each a different shape so they are distinguishable at a
+		  glance and not only by colour: the theme is a half circle, the language is
+		  a word chip, the help is a question mark, the menu is three lines. They
+		  were four loose buttons before, and they are grouped now because they are
+		  the same kind of thing - switches - rather than four unrelated widgets.
+		-->
+		<div class="tools">
+			<div class="segmented">
+				<!-- `data-i18n` sets textContent, which would WIPE the svg - so an
+				     icon button carries its label as an attribute instead. Only the
+				     locale chip, which has no icon, is labelled with text. -->
+				<button class="tool" id="themebtn" type="button"
+					data-i18n-attr="aria-label:theme.toggle;title:theme.toggle">
+					<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor"
+						stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="8.5" />
+						<path d="M12 3.5v17a8.5 8.5 0 0 0 0-17z" fill="currentColor" stroke="none" />
+					</svg>
+				</button>
+				<button class="tool" id="localebtn" type="button">فارسی</button>
+				<button class="tool" id="helpbtn" type="button"
+					data-i18n-attr="aria-label:shortcuts.open;title:shortcuts.open">
+					<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor"
+						stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+						<circle cx="12" cy="12" r="8.5" />
+						<path d="M9.6 9.4a2.5 2.5 0 1 1 3.3 2.4c-.6.3-.9.9-.9 1.6" />
+						<circle cx="12" cy="17" r="0.7" fill="currentColor" stroke="none" />
+					</svg>
+				</button>
+				<button class="tool tool--menu" id="menubtn" type="button"
+					data-i18n-attr="aria-label:menu.title;title:menu.title">
+					<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor"
+						stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+						<path d="M5 7h14M5 12h14M5 17h14" />
+					</svg>
+				</button>
+			</div>
+		</div>
+	</header>
 <div class="shell">
 		<!--
 		  The main sidebar. Categories are the queue's filing system: a set is
@@ -580,7 +591,7 @@
 				</section>
 					<section class="settings-page" data-page="categories">
 						<p class="hint" data-i18n="settings.categories.hint"></p>
-						<ul class="catlist" id="category-list"></ul>
+						<ul class="catlist" id="category-editor"></ul>
 						<div class="row-add">
 							<input class="field__v field__v--text" id="category-name" type="text"
 								data-i18n-attr="placeholder:settings.categories.new" />

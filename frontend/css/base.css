@@ -634,3 +634,91 @@ button, input, select, textarea {
 		max-width: 460px;
 	}
 }
+
+/* ---- the header ----------------------------------------------------------
+   Redesigned: three parts with the middle one flexible, and each tool a
+   different SHAPE so it is distinguishable at a glance and not only by colour.
+   The theme is a half circle, the language a word chip, the help a question
+   mark, the menu three lines.
+
+   It previously carried two buttons for adding and a magnifier inside the URL
+   box, which read as a search field. The search box lives in the queue's own
+   header now, and the magnifier there is the only one in the app. */
+
+.brand {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-2);
+	flex: 0 0 auto;
+	color: var(--text);
+	text-decoration: none;
+}
+
+.brand__mark {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 30px;
+	height: 30px;
+	border-radius: var(--r-2);
+	background: linear-gradient(135deg, var(--accent), var(--accent-2));
+	color: #04121a;
+	flex: 0 0 auto;
+}
+
+.brand__title {
+	font-family: var(--font-display);
+	font-size: var(--text-md);
+	font-weight: 680;
+	letter-spacing: var(--track-tight);
+}
+
+/* The tools are icon buttons, centred in a fixed square, so the segmented group
+   has an even rhythm no matter what each one contains. */
+.tool {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 32px;
+	height: 28px;
+	padding: 0 var(--sp-2);
+}
+
+/* The locale button is a CHIP and not an icon: a language is a word, and "??"
+   would be a guess. It shows the language you would switch TO. */
+#localebtn {
+	font-weight: 650;
+	letter-spacing: 0;
+}
+
+.tool svg { display: block; }
+
+.tool--menu { min-width: 34px; }
+
+/* The add box is one pill: a field and a button sharing a border, which is what
+   makes the pair read as one control rather than two. */
+.addbar__input {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 30px;
+	padding: var(--sp-1) var(--sp-3);
+	background: var(--surface-hi);
+	border: 1px solid var(--line);
+	border-radius: var(--r-pill);
+	color: var(--text);
+	font-family: var(--mono);
+	font-size: var(--text-sm);
+}
+
+.addbar__input::placeholder { color: var(--text-faint); }
+
+.addbar__input:focus {
+	background: var(--surface);
+	border-color: var(--accent);
+}
+
+.addbar__btn {
+	flex: 0 0 auto;
+	height: 30px;
+	padding: var(--sp-1) var(--sp-4);
+}
