@@ -180,17 +180,6 @@ pub fn has_live(ms []Mirror) bool {
 	return false
 }
 
-// dead returns the mirrors aria2 has stopped using - the ones to DROP from a set
-// on a retry.
-//
-// "Stopped using" is not the same as "unreachable", and the difference is the whole
-// subtlety of the feature. aria2 reports `waiting` for a mirror it has not needed
-// yet, which is indistinguishable from a mirror it tried and gave up on. So this
-// cannot honestly be called dead: it returns the mirrors with no bytes coming from
-// them, which is what a caller can act on, and the name says so.
-//
-// A caller that wants certainty should re-add and watch - which is what retry
-// already does, and why the answer arrives as a new gid rather than as a promise.
 pub fn idle_mirrors(ms []Mirror) []string {
 	mut out := []string{}
 	for m in ms {
@@ -199,4 +188,47 @@ pub fn idle_mirrors(ms []Mirror) []string {
 		}
 	}
 	return out
+}
+
+// retry_set is the set to RE-ADD a failed download from, after dropping the
+// mirrors aria2 never used.
+//
+// THE PHASE 4 GATE, and this is the half that is easy to get backwards.
+//
+// "A dead mirror is dropped and the set continues" sounds like: drop anything
+// not marked used, and you have a smaller set. That is wrong, and it fails in
+// the case the feature exists for.
+//
+// aria2 reports `waiting` for two different things:
+//
+//   * a mirror it has NOT NEEDED YET - the download is doing fine, it just does
+//     not need a second connection right now;
+//   * a mirror it TRIED AND GAVE UP ON.
+//
+// They are the same word, so a rule that drops every idle mirror also drops the
+// healthy ones, and the retry loses the mirrors the user asked for.
+//
+// So the rule distinguishes using the one signal there is:
+//
+//   * at least one mirror is LIVE -> the idle ones are the ones aria2 could not
+//     use, and the retry re-adds only the ones that worked. The set continues,
+//     and it is smaller.
+//   * NOTHING is live -> nothing distinguishes dead from unused, so the set is
+//     kept whole. A retry that dropped everything would have nothing to add,
+//     which is the one outcome worse than a slow retry.
+//
+// This is a PURE function of the state aria2 reported, which is why it is testable
+// without a network - and why the tests below are the whole proof of the rule.
+pub fn retry_set(ms []Mirror) []string {
+	live := live_mirrors(ms)
+	if live.len == 0 {
+		// Nothing worked and nothing is provably dead either. Keep the whole set:
+		// a retry that narrowed to nothing would have nothing to re-add.
+		mut all := []string{}
+		for m in ms {
+			all << m.uri
+		}
+		return all
+	}
+	return live
 }

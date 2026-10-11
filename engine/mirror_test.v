@@ -191,6 +191,109 @@ fn mir(ms []Mirror, uri string) Mirror {
 	panic('no mirror for ${uri} in ${ms}')
 }
 
+// is_in answers whether a uri is in a list. A helper rather than `.contains()` on
+// a literal, because V 0.5.2 cannot parse `[...].contains(x)` - the array literal
+// followed by a method call is a syntax error at the closing paren.
+fn is_in(uri string, list []string) bool {
+	for u in list {
+		if u == uri {
+			return true
+		}
+	}
+	return false
+}
+
+// ---- the retry set -------------------------------------------------------
+//
+// The phase-4 gate's other half: "a dead mirror is dropped and the set
+// continues". The subtlety is that `waiting` in aria2.getUris means BOTH
+// "not needed yet" and "tried and gave up on", so the rule has to distinguish
+// them with the one signal there is.
+
+const two_mirrors_one_live = '[{"status":"used","uri":"https://live.example/f.bin"},{"status":"waiting","uri":"http://127.0.0.1:1/dead.bin"}]'
+
+const two_mirrors_nothing_live = '[{"status":"waiting","uri":"http://a/dead.bin"},{"status":"waiting","uri":"http://b/alive-but-unused.bin"}]'
+
+const three_mirrors_two_live = '[{"status":"used","uri":"https://a.example/f.bin"},{"status":"waiting","uri":"http://dead.example/f.bin"},{"status":"used","uri":"https://b.example/f.bin"}]'
+
+const subset_wanted = ['http://a/1', 'https://b/2', 'http://c/3']
+
+fn test_at_least_one_live_mirror_drops_the_idle_ones() {
+	// The live one worked, so the idle one is the one aria2 could not use and the
+	// retry re-adds only what worked. The set continues, and it is smaller.
+	got := retry_set(mirrors_from(['http://127.0.0.1:1/dead.bin', 'https://live.example/f.bin'],
+		decode_entries(two_mirrors_one_live)))
+	assert got.len == 1, '${got}'
+	assert got[0] == 'https://live.example/f.bin', got[0]
+}
+
+fn test_nothing_live_keeps_the_whole_set() {
+	// THE bug this rule exists to prevent. Both mirrors are `waiting`, which in
+	// aria2's vocabulary means BOTH "not needed yet" and "gave up on". A rule that
+	// drops every idle mirror produces an empty set here, and a retry that has
+	// nothing to re-add is worse than a slow one.
+	got := retry_set(mirrors_from(['http://a/dead.bin', 'http://b/alive-but-unused.bin'],
+		decode_entries(two_mirrors_nothing_live)))
+	assert got.len == 2, 'an empty retry set is the worst possible answer: ${got}'
+	assert got[0] == 'http://a/dead.bin' && got[1] == 'http://b/alive-but-unused.bin', 'the whole set must survive: ${got}'
+}
+
+fn test_two_live_mirrors_drop_only_the_dead_one() {
+	got := retry_set(mirrors_from([
+		'https://a.example/f.bin',
+		'http://dead.example/f.bin',
+		'https://b.example/f.bin',
+	], decode_entries(three_mirrors_two_live)))
+	assert got.len == 2, '${got}'
+	assert got[0] == 'https://a.example/f.bin', 'the first live mirror survived: ${got[0]}'
+	assert got[1] == 'https://b.example/f.bin', 'the second live mirror survived: ${got[1]}'
+}
+
+fn test_a_single_mirror_survives_a_retry_untouched() {
+	// One mirror is the common case, and a rule that reasons about "the live ones"
+	// must not make a single-mirror set disappear.
+	got := retry_set(mirrors_from(['https://only.example/f.bin'],
+		[Mirror{ uri: 'https://only.example/f.bin', status: mirror_used }]))
+	assert got.len == 1 && got[0] == 'https://only.example/f.bin', 'a single mirror must not vanish'
+}
+
+fn test_an_empty_mirror_state_retries_empty_rather_than_panicking() {
+	// No rows from aria2 at all - a download it has forgotten. There is nothing
+	// to narrow and nothing to panic about.
+	assert retry_set([]Mirror{}).len == 0
+}
+
+fn test_the_retry_set_is_always_a_subset_of_the_original() {
+	// The invariant that makes the whole rule safe to apply: whatever it returns,
+	// it was in the set we asked about. A retry set containing an address the user
+	// never supplied would be a download from an unknown source.
+	//
+	// The set is a const, like the fixtures above, because a local array VARIABLE
+	// in this file is not resolved by V 0.5.2 once it is passed to a function on
+	// the next line - the callee reports the name as undefined. Two of the earlier
+	// tests do exactly that and work, so it is positional rather than general, and
+	// a const sidesteps it.
+	state := [
+		Mirror{
+			uri:    'http://a/1'
+			status: mirror_used
+		},
+		Mirror{
+			uri:    'https://b/2'
+			status: mirror_waiting
+		},
+		Mirror{
+			uri:    'http://c/3'
+			status: mirror_used
+		},
+	]
+	got := retry_set(state)
+	assert got.len > 0, 'the retry set must not be empty: ${got}'
+	for u in got {
+		assert is_in(u, subset_wanted), 'a mirror outside the set we asked about came back'
+	}
+}
+
 // A fresh download has no live mirror yet and a finished one has none any more.
 // Both are legitimate and neither means the set failed.
 fn test_a_set_with_nothing_in_use_is_not_a_failure() {
