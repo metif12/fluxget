@@ -178,6 +178,35 @@ fn write_fake_frontend(root string) !string {
 
 const css_with_one_font = '@font-face { font-family: "X"; src: url("../fonts/x.woff2") format("woff2"); }'
 
+const frontend_root = os.join_path('.', 'frontend')
+
+// The real contract: every asset the packer inlines must be NAMED by the real
+// index.html. The first version of this test asserted against `doc()`, the test
+// fixture - which passes happily while the real document has never heard of a
+// newly added script. That is exactly the bug class it was written to catch: a
+// byte-slider script that loads in dev over HTTP and silently does nothing in the
+// packed build.
+fn test_index_html_names_every_script_the_packer_inlines() {
+	html := os.read_file(os.join_path(frontend_root, 'index.html')) or {
+		assert false, 'cannot read frontend/index.html: ${err.msg()}'
+		return
+	}
+	for script in ['js/i18n.js', 'js/chart.js', 'js/byte-slider.js', 'js/boot.js'] {
+		assert html.contains('src="' + script + '"'), 'index.html does not name ${script} - it would load in dev and vanish in production'
+	}
+	// i18n must stay first: it owns the locale and the theme, and the files after
+	// it render into a document whose language it has already set.
+	i18n_at := html.index('js/i18n.js') or {
+		assert false, 'i18n.js is not referenced'
+		return
+	}
+	boot_at := html.index('js/boot.js') or {
+		assert false, 'boot.js is not referenced'
+		return
+	}
+	assert i18n_at < boot_at, 'i18n.js must load before boot.js'
+}
+
 fn scratch_dir(name string) string {
 	d := os.join_path(os.temp_dir(), name)
 	os.rmdir_all(d) or {}

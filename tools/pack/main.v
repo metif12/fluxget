@@ -354,6 +354,10 @@ fn main() {
 		},
 		Asset{
 			kind: 'js'
+			rel:  'js/byte-slider.js'
+		},
+		Asset{
+			kind: 'js'
 			rel:  'js/boot.js'
 		},
 	]

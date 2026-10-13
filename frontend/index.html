@@ -547,18 +547,40 @@
 								<span class="field__k" data-i18n="settings.split">split</span>
 								<input class="field__v" id="set-split" type="number" min="1" max="16" step="1" />
 							</label>
-							<label class="field">
-								<span class="field__k" data-i18n="settings.min_split_size">min split size (bytes)</span>
-								<input class="field__v" id="set-min_split_size" type="number" min="1024" step="1024" />
-							</label>
-							<label class="field">
+							<!--
+							  A byte value is a slider over a curated ladder, plus the
+							  exact field beside it. A number box alone asks a human to
+							  think in bytes per second - 524288 - and nobody knows
+							  whether that is fast. The ladder puts a real setting under
+							  every fraction of the track. The field survives because
+							  the slider SNAPS: a document holding a value between two
+							  stops - 5 MiB, say - must not be rewritten by merely
+							  opening Settings and saving.
+							-->
+							<div class="field field--byte">
+								<span class="field__k" data-i18n="settings.min_split_size">min split size — below it a download is one connection</span>
+								<div class="byte">
+									<input class="byte__range" id="byslider-min_split_size" type="range" min="0" max="8" step="1" />
+									<input class="field__v byte__num" id="bynum-min_split_size" type="number" min="1024" step="1024" />
+									<span class="byte__out" id="byout-min_split_size">1.0 MiB</span>
+								</div>
+							</div>
+							<div class="field field--byte">
 								<span class="field__k" data-i18n="settings.download_limit">download limit (bytes/s, 0 = no limit)</span>
-								<input class="field__v" id="set-download_limit" type="number" min="0" step="1024" />
-							</label>
-							<label class="field">
+								<div class="byte">
+									<input class="byte__range" id="byslider-download_limit" type="range" min="0" max="9" step="1" />
+									<input class="field__v byte__num" id="bynum-download_limit" type="number" min="0" step="1024" />
+									<span class="byte__out" id="byout-download_limit">no limit</span>
+								</div>
+							</div>
+							<div class="field field--byte">
 								<span class="field__k" data-i18n="settings.upload_limit">upload limit (bytes/s, 0 = no limit)</span>
-								<input class="field__v" id="set-upload_limit" type="number" min="0" step="1024" />
-							</label>
+								<div class="byte">
+									<input class="byte__range" id="byslider-upload_limit" type="range" min="0" max="9" step="1" />
+									<input class="field__v byte__num" id="bynum-upload_limit" type="number" min="0" step="1024" />
+									<span class="byte__out" id="byout-upload_limit">no limit</span>
+								</div>
+							</div>
 						</div>
 					</fieldset>
 				</section>
@@ -641,10 +663,12 @@
 <!--
   Load order is a dependency order, not a convenience: i18n.js owns the locale and
   the theme and has to be live before anything renders, chart.js only needs the
-  DOM, and boot.js is the only thing that calls into the others.
+  DOM, byte-slider.js only needs the DOM, and boot.js is the only thing that calls
+  into the others.
 -->
 <script src="js/i18n.js"></script>
 <script src="js/chart.js"></script>
+<script src="js/byte-slider.js"></script>
 <script src="js/boot.js"></script>
 </body>
 </html>

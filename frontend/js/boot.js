@@ -1398,9 +1398,11 @@
 		set_number("max_concurrent", s.max_concurrent);
 		set_number("max_per_server", s.max_per_server);
 		set_number("split", s.split);
-		set_number("min_split_size", s.min_split_size);
-		set_number("download_limit", s.download_limit);
-		set_number("upload_limit", s.upload_limit);
+		// The byte fields are sliders, and the widget keeps the exact value typed
+		// in the number box rather than the sliders snapped position.
+		FluxSlider.set("min_split_size", s.min_split_size);
+		FluxSlider.set("download_limit", s.download_limit);
+		FluxSlider.set("upload_limit", s.upload_limit);
 		set_text("dir", s.dir);
 		set_text("seed_ratio", s.seed_ratio);
 		set_text("seed_time", s.seed_time);
@@ -1512,10 +1514,13 @@
 		var payload = {
 			max_concurrent: number_or_zero("max_concurrent"),
 			max_per_server: number_or_zero("max_per_server"),
-			download_limit: number_or_zero("download_limit"),
-			upload_limit: number_or_zero("upload_limit"),
 			split: number_or_zero("split"),
-			min_split_size: number_or_zero("min_split_size"),
+			// The byte fields are sliders, and the widget reads the exact value in
+			// its number box - not the slider's snapped position - so a document
+			// between two stops is not rewritten by opening Settings and saving.
+			min_split_size: FluxSlider.value("min_split_size"),
+			download_limit: FluxSlider.value("download_limit"),
+			upload_limit: FluxSlider.value("upload_limit"),
 			dir: el("set-dir").value.trim(),
 			bt_enabled: el("set-bt_enabled").checked,
 			seed_ratio: el("set-seed_ratio").value.trim(),
@@ -1574,6 +1579,23 @@
 		refresh_tool_labels();
 		chart = window.FluxChart.create(el("chart"));
 		chart.resize();
+		// Mount the byte sliders. The exact number box is the source of truth, so
+		// these three calls are what keep it in step with the thumb.
+		FluxSlider.mount({
+			name: "min_split_size", kind: "size",
+			slider: "byslider-min_split_size", number: "bynum-min_split_size",
+			out: "byout-min_split_size"
+		});
+		FluxSlider.mount({
+			name: "download_limit", kind: "rate",
+			slider: "byslider-download_limit", number: "bynum-download_limit",
+			out: "byout-download_limit"
+		});
+		FluxSlider.mount({
+			name: "upload_limit", kind: "rate",
+			slider: "byslider-upload_limit", number: "bynum-upload_limit",
+			out: "byout-upload_limit"
+		});
 
 		var is_dev = location.protocol === "http:";
 		// Which of the two frontends is running. It used to be a status card, which

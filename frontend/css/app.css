@@ -1027,3 +1027,46 @@
 	color: var(--text-faint);
 	font-variant-numeric: tabular-nums;
 }
+
+/* ---- byte sliders --------------------------------------------------------
+   A rate or a size is a number a human does not think in. The slider puts round
+   values under the thumb; the number box beside it stays for anything between
+   two stops, and the readout says what the number MEANS. */
+
+.byte {
+	display: flex;
+	align-items: center;
+	gap: var(--sp-3);
+}
+
+.byte__range {
+	flex: 1 1 auto;
+	min-width: 0;
+	height: 22px;
+	/* Without an accent-colour the native slider is a grey slab from another OS. */
+	accent-color: var(--accent);
+	cursor: pointer;
+}
+
+/* The exact field is narrow on purpose: it is the fallback, not the main event,
+   and a wide number box would make the slider look secondary. */
+.byte__num {
+	flex: 0 0 auto;
+	width: 92px;
+	min-height: 26px;
+	padding: var(--sp-1) var(--sp-2);
+}
+
+.byte__out {
+	flex: 0 0 auto;
+	min-width: 74px;
+	font-family: var(--mono);
+	font-size: var(--text-xs);
+	color: var(--text-dim);
+	font-variant-numeric: tabular-nums;
+	text-align: end;
+}
+
+/* A byte field spans its grid column: a slider squeezed into a third of the
+   settings width is a slider nobody can aim at. */
+.field--byte { grid-column: 1 / -1; }
