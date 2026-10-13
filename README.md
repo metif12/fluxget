@@ -8,13 +8,14 @@ that uses the OS webview instead of bundling a browser engine.
 V 0.5.2  ·  vails 0.2.0  ·  aria2 1.37  ·  no npm, no CDN, no bundler
 ```
 
-> **Status: Phase 3 complete.** The window opens, the bridge round-trips, and
-> **a real download runs**: Fluxget finds aria2c, spawns it, speaks JSON-RPC to
-> it, and shows the queue live. Every row is operable from its own buttons and from
-> the keyboard, the limits a user sets are pushed to the engine and **verified
-> against what aria2 actually holds**, and the production build ships as **one
-> packed document**. Phases 4-8 are [re-planned](#roadmap) around competitive
-> parity with Surge.
+> **Status: Phases 0–3 complete, Phase 4 half done, plus a UI overhaul.** The
+> window opens, the bridge round-trips, and **a real download runs**. Every row is
+> operable by keyboard and by mouse, the queue is searchable and categorised,
+> settings persist, and the production build ships as **one packed document**.
+> Phase 4's mirror work is done — aria2 tells us which mirror it is using, and a
+> dead one is dropped so the set continues — and the rest of it (adaptive
+> connections, force-sequential streaming, checksums, `fluxget bench`) is not.
+> What is outstanding is tracked in [docs/BACKLOG.md](docs/BACKLOG.md).
 
 ![Phase 1: a real 1 MiB download, complete, with the Finished notice](tests/e2e_windows/phase1-download.png)
 
@@ -290,11 +291,45 @@ competitive value, not by what happened to be built first.
 | **1** ✅ | `aria2ctl/` + `core/` + `engine/`, real download in the UI | a real download visible in the window |
 | **2** ✅ | **Product feel** — design system, i18n with `fa` RTL, light + dark, keyboard shortcuts, speed charts, `tools/pack` | switch language and theme live; a chart redraws every tick; the packed document runs |
 | **3** ✅ | **Control + settings** — pause/resume/remove/retry/move, global and per-item limits, `store/` | every row operable; limits and settings survive a restart |
-| **4** | **Speed + mirrors** — adaptive connections, mirror sets with liveness probing, force-sequential streaming, checksums, `fluxget bench` | `bench` publishes numbers against aria2c/curl **including where we lose**; a dead mirror is dropped and the set continues |
+| **4** ◑ | **Speed + mirrors** — adaptive connections, mirror sets with liveness probing, force-sequential streaming, checksums, `fluxget bench` | `bench` publishes numbers against aria2c/curl **including where we lose**; a dead mirror is dropped and the set continues |
 | **5** | **Torrents** — magnet and `.torrent`, peers, trackers, file selection, seed policy | a magnet and a `.torrent` both finish |
 | **6** | **Automation** — Control API, browser extension, CLI, headless mode, shell completion, autostart | a Chrome download reaches Fluxget; `fluxget add` drives a running instance |
 | **7** | **Scheduler** — presets, day windows, conditions | a window really changes the global limit |
 | **8** | **MCP server** — stdio, named tools, over the Control API | an assistant can ask Fluxget for a download |
+
+**◑ half done** — Phase 4's mirror half landed: `engine/mirror.v` reads which
+mirror aria2 is pulling from (`aria2.getUris` answers `used`/`waiting`, expanded
+to more rows than were submitted), `Engine.mirror_state` maps that to a set, and
+`engine.retry_set` drops the idle ones so a dead mirror stops costing a
+connection. The subtlety it got right is in the code: `waiting` means both "not
+needed yet" and "gave up on", so nothing is dropped unless at least one mirror is
+live, because a retry set narrowed to nothing has nothing to re-add.
+
+### Landed between the phases
+
+Unnumbered work that is done and did not fit a phase row. Recorded so the table
+above is not read as the whole of the app.
+
+- **Per-language fonts.** Inter for English, Vazirmatn for Persian, JetBrains Mono
+  for numbers. All SIL OFL, shipped with the app, and chosen by `html[lang]` so
+  switching language switches the face. Embedded as data URIs because the CSP is
+  `font-src 'self' data:`.
+- **Two sidebars.** The queue's categories are built-in views derived from a row's
+  status (so they cannot be deleted) plus user categories that persist in the
+  settings document. Settings has a sidebar so limits, files, categories and the
+  developer log are findable.
+- **Full-text search** over the whole queue, in the pane header where it is always
+  visible, matching name, directory, gid, and aria2's error text.
+- **Add as a dialog.** Paste five URLs and it detects them, de-duplicates them,
+  labels each as url/magnet/torrent, and lets you pick. The folder it offers is
+  guessed from the address's path segment, and it is an offer.
+- **Row details on click.** Pieces, piece length, verified length, connections in
+  use, the file list, the tracker list, and which mirror aria2 is using — fetched
+  per row on demand rather than carried in every tick.
+- **A full-width header** with one add path, and four tools distinguishable by
+  shape rather than by colour.
+- **Byte settings as sliders** over a curated ladder with a readout, and the exact
+  number field kept because the slider snaps.
 
 ### Where we already stand against Surge
 

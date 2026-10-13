@@ -172,6 +172,39 @@ list is below, and each one is recorded in the file that hit it.
 - No float format specifier: `${v:0.1f}` is "unsuitable digit", there is no
   `str_float_precision`, and `strconv.ftoa_64` is scientific. See
   `engine/limits.v` for the integer-arithmetic version.
+- **An apostrophe inside a `//` comment opens a rune literal.** `// V 0.5.2's fix`
+  makes the lexer read the quote as a character start, and the error appears
+  hundreds of lines later as ``unexpected name `the``` — pointing at a word in an
+  unrelated comment. Never put an apostrophe in a comment.
+- **`[...].contains(x)` does not parse.** An array literal followed by a method
+  call is a syntax error at the closing paren; use a helper function.
+- **A local array literal can fail to resolve** when it is assigned on one line
+  and passed to a function on the next. Positional, not general — two tests
+  earlier in the same file do exactly that and work. A `const` sidesteps it, and
+  so does building a `[]Mirror{}` literal inline.
+- **`set` is a reserved word** and cannot be used as a variable name in a test.
+- **`u in arr` inside an assert parses as a map lookup** on the right-hand side
+  and reports the array as an undefined variable. Use `arr.contains(u)`.
+- **`import net.http`'s `FetchConfig.header` is the way to set `Range`.** The
+  transfer manager does not open a socket itself; see ADR-0002 in `aria2v`.
+- **`json.encode` and `json.decode` were replaced by `json2`.** `json.encode(x)`
+  is now `json2.encode(x)`; `json.decode[T]` is `json2.decode[T]`.
+
+### One rule about the machine, not the language
+
+**Do not rebuild V while a gate is running.** An external process modifying the
+installation mid-run produces:
+
+- `Permission denied` removing files under V's module cache
+- `cannot duplicate operator overload '-'` inside `vlib/math/`
+- a `make v1` fallback, which is not what you asked for
+
+The tell is untracked files in the compiler's own tree:
+```powershell
+git -C C:\Users\xman\v\ status --short
+```
+None of that is your change. Fluxget's own suite being green in the same run is
+what confirms it. Recorded here because it cost a full debugging cycle once.
 
 ### One claim in this file that is false
 
