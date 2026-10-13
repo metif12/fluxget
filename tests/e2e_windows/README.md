@@ -12,6 +12,23 @@ JSON string, which a real aria2 rejects; and a queue row was labelled with the
 fake transport cannot find any of them — it returns canned responses and never
 validates a request.
 
+## The screenshots are not committed
+
+The proof artefacts are deliberately **not in git**. They are rendered pixels of
+a developer's machine: window titles, local filesystem paths in the status cards,
+the account name in a settings dialog, sometimes a download URL.
+
+That is not tiny, and it is not a secret either. It is identity that nobody
+benefits from having in a public repo, and a screenshot is the one artefact in
+this project that is easy to leak accidentally. So the policy is:
+
+- capture them locally with `capture-window.ps1`;
+- read them and act on what they show;
+- commit the *finding*, never the frame.
+
+Every reference to a `.png` below names the file you would create, not a file
+this directory ships.
+
 ## Setup
 
 ```powershell
@@ -34,7 +51,7 @@ Open <http://127.0.0.1:8413/> in a normal browser too: the page degrades to a
 | round trip | the page's `ping → pong` | `pong` | JS → `bridge.Router` → handler → JS |
 | grants | the console line | `forbidden: fluxget.not_granted is not allowed for window "main"` | the T2 gate denies, and says `forbidden:` rather than `unknown method:` |
 
-Proof: `phase0-bridge.png` in this directory.
+Capture as `phase0-bridge.png` locally.
 
 A synthesised click does not reach WebView2 content reliably, which is why the
 page calls the bridge itself — the same trick the vails repo uses with
@@ -56,6 +73,12 @@ is worse than no screenshot at all.
 It also counts distinct colours and **refuses to write a blank frame**. A capture
 that failed to render is a failure, not evidence, and a proof script that can
 emit a plausible lie is not a proof script.
+
+Before committing anything from this directory, check what is *in* the frame:
+```powershell
+git status --short tests\e2e_windows
+```
+If a PNG shows up, stop and read it.
 
 ## Phase 1 — a real download
 
@@ -84,12 +107,11 @@ live one.
 | a toast | `Finished …` | the diff in `core/notice.v` noticed the transition |
 | `BRIDGE` card | `ping → pong` | the Phase 0 chain still works now that handlers hold state |
 
-Proof: `phase1-download.png` — `1Mb.dat`, complete, 100.0%, with a
-`Finished 1Mb.dat` notice.
+Capture as `phase1-download.png`.
 
-The **log pane is empty** in that screenshot, and that is correct:
-`--console-log-level=warn` means a healthy engine says nothing. The Logs tab is
-for the day it does.
+The **log pane is empty** in that frame, and that is correct:
+`--console-log-level=warn` means a healthy engine says nothing. The log is for
+the day it does.
 
 ### The session round-trip, proved without a large download
 
@@ -99,7 +121,7 @@ when the app closes is the one thing a download manager must not do. Prove the
 pick it up.
 
 ```powershell
-$dir = 'D:/MyProjects/fluxget/downloads'
+$dir = "$env:USERPROFILE\Downloads\fluxget-e2e"
 @"
 https://proof.ovh.net/files/1Mb.dat
  dir=$dir
@@ -113,7 +135,6 @@ $env:FLUXGET_PROBE = ''      # nothing seeded: the queue must come from the file
 
 Expected: a row named `resumed-from-session.dat` — that name came from the
 `out=` line in the session file, which is the whole proof.
-Proof: `phase1-session-resume.png`.
 
 ### Shutdown
 
@@ -133,14 +154,19 @@ Stop-Process -Name fluxget,aria2c -Force -ErrorAction SilentlyContinue
 
 Phase 2 lost a run to exactly this, twice.
 
-## Phase 2 - the packed document, in Persian
+## Phase 2 — the packed document, in Persian
 
 ```powershell
 .\scripts\build.ps1            # packs build\web\index.html
+$env:FLUXGET_SETTINGS = "$env:TEMP\fluxget-e2e\settings.json"   # never your real one
 $env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'   # 1 MiB, opt-in
 .\build\fluxget.exe            # NOT --dev: this is the packed path
 .\scripts\capture-window.ps1 -Out tests\e2e_windows\phase2-packed-fa-download.png
 ```
+
+`FLUXGET_SETTINGS` is set because the real location is
+`%USERPROFILE%\.fluxget\settings.json` and an e2e run has no business rewriting
+it.
 
 | Check | How | Expected | What it proves |
 |---|---|---|---|
@@ -149,27 +175,24 @@ $env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'   # 1 MiB, opt-in
 | reason | the failing row's red badge | aria2's own sentence | `errorMessage` is being read, not an invented `error` key |
 | toast | `ناموفق: <name> — <reason>` | composed in Persian | `I18n.compose_notice` is the one composer |
 
-Proof: `phase2-packed-fa-download.png`.
-
 Two of these failed first and are the reason the frame is worth having:
 
-- **The log pane did not fill its column.** A `.pane` defaults to `flex: 0 1
-  auto`, which sizes it to its content, and a log with zero lines is zero tall.
+- **the chart pane did not fill its column.** A `.pane` defaults to `flex: 0 1
+  auto`, which sizes it to its content, and a chart is sized by its container.
   Only visible in the image.
-- **The engine card read `— در حال آماز`.** Forcing `direction: ltr` on every
+- **the engine card read `— در حال آماز`.** Forcing `direction: ltr` on every
   card value reordered a Persian sentence around its em dash and then ellipsised
   half a word away. Only values that really are LTR — a path, a version — may
-  opt in now, via `data-ltr`.
+  opt in now.
 
-A probe URL that no longer serves is not an app bug: the screenshot above was
-taken with a host that answers `Got EOF from the server.`, and the row still
-rendered the reason, which is the point.
+A probe URL that no longer serves is not an app bug: a host that answers
+`Got EOF from the server.` still renders the reason, which is the point.
 
-## Phase 3 - every row operable, and settings that survive a restart
+## Phase 3 — every row operable, and settings that survive a restart
 
 ```powershell
 .\scripts\build.ps1
-$env:FLUXGET_SETTINGS = "$env:TEMP\fluxget-e2e\settings.json"   # do not touch your real one
+$env:FLUXGET_SETTINGS = "$env:TEMP\fluxget-e2e\settings.json"
 $env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'
 .\build\fluxget.exe
 .\scripts\capture-window.ps1 -Out tests\e2e_windows\phase3-packed-fa-rows.png
@@ -178,32 +201,28 @@ $env:FLUXGET_PROBE = 'https://ash-speed.hetzner.com/1MB.bin'
 | Check | How | Expected | What it proves |
 |---|---|---|---|
 | row actions | the row is selected on open | `تلاش دوباره` / `حذف` on an errored row | the buttons come from the row's real status |
-| settings | the queue header, no dialog | thirteen options pushed at startup, no refusal notice | `changeGlobalOption` under aria2's own names |
+| settings | the queue header, no dialog | options pushed at startup, no refusal notice | `changeGlobalOption` under aria2's own names |
 | settings file | `FLUXGET_SETTINGS` | written on the first save, read on the next start | the document round-trips |
 
-Proof: `phase3-packed-fa-rows.png`, taken from the release binary with a real
-`aria2c` child. `FLUXGET_SETTINGS` is set for the run because the real location is
-`%USERPROFILE%\.fluxget\settings.json` and an e2e run has no business rewriting it.
+### The two UI frames, and what they are NOT
 
-### The two UI screenshots, and what they are NOT
-
-`phase3-ui-rows.png` and `phase3-ui-settings.png` are **layout proofs taken in a
-normal browser against the dev server with a stubbed `window.vails`**. They exist
+`phase3-ui-rows` and `phase3-ui-settings` are **layout proofs taken in a normal
+browser against the dev server with a stubbed `window.vails`**. They exist
 because of one specific gap: the row actions are revealed by `.row.is-selected`
 and the settings dialog opens on a keypress, and an unattended run can do
-neither - so the states that Phase 3 adds could not otherwise be looked at.
+neither — so the states Phase 3 adds could not otherwise be looked at.
 
 They prove layout, CSS and i18n. They prove **nothing** about the bridge: every
 command in them is answered from a table in the init script. The evidence that the
 commands work is `platform/control_test.v` (which asserts the aria2 method and
-arguments on the wire) and the release-binary screenshot above. Do not quote these
-two as evidence that a command works.
+arguments on the wire) and the release-binary frame above. Do not quote these two
+as evidence that a command works.
 
 ```powershell
 # How they were taken, if you want to reproduce one:
 .\build\fluxget.exe --dev                       # serves frontend/ on :8413
 # open http://127.0.0.1:8413/ in a browser with window.vails.call stubbed by an
-# init script, then click #settingsbtn and screenshot.
+# init script, then open the settings dialog and screenshot.
 ```
 
 Two layout bugs were found this way and would not have been found otherwise: the
@@ -215,9 +234,9 @@ at `opacity: 0` because rebuilding restarts the entrance animation.
 
 Delete or rename `runtime\aria2c.exe` and start the app. The window must still
 open — that window *is* the Setup screen — and the `ENGINE` card should read
-`missing` with the full list of the 32-odd places that were searched and a
-sentence naming `fetch-aria2.ps1`. A missing engine is a state of this app, not
-a different app.
+`missing` with the full list of the places that were searched and a sentence
+naming `fetch-aria2.ps1`. A missing engine is a state of this app, not a
+different app.
 
 ## Production transport
 
@@ -226,13 +245,9 @@ a different app.
 .\build\fluxget.exe          # no --dev
 ```
 
-Expected: the window opens with no server involved, and the `transport` card
-reads `packed document (set_html)`. This needs `tools/pack`, which lands in
-Phase 2 — before that, `find_packed()` returns empty and the app explains itself
-rather than showing a blank window.
-
-**So every Phase 1 proof above is a dev-mode run, and this is the one claim the
-screenshots do not support.** Recorded here rather than left implied.
+Expected: the window opens with no server involved, and the transport card
+reads `packed`. This needs `tools/pack`; without it `find_packed()` returns empty
+and the app explains itself rather than showing a blank window.
 
 ## When vails breaks
 
@@ -250,6 +265,5 @@ the window will not open and this directory's checks are the wrong place to look
 
 ## Later phases
 
-Each phase adds its own checklist here, and a proof screenshot with the same
-`phase<N>-<what>.png` naming. Nothing in this folder runs from `v test`, by
-design.
+Each phase adds its own checklist here. Nothing in this folder runs from
+`v test`, by design — and nothing in it should end up in a commit.
